@@ -1,0 +1,5 @@
+.env
+.adk/*
+*.db
+__pycache__/*
+*.pyc

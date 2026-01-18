@@ -1,0 +1,6 @@
+fastapi
+asyncpg
+httpx
+plotly
+pandas
+uvicorn
