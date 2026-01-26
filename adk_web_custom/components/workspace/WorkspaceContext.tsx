@@ -1,4 +1,3 @@
-// components/workspace/WorkspaceContext.tsx
 "use client";
 
 import React, { createContext, useContext, useMemo, useState } from "react";
@@ -8,13 +7,14 @@ export type WorkspaceWidget =
       id: string;
       type: "table";
       title: string;
-      csvText: string; // ✅ ADK 응답으로 받은 CSV 문자열(또는 base64 decode 결과)
+      csvText: string; 
     }
+  | { id: string; type: "tableUrl"; title: string; src: string } 
   | {
       id: string;
       type: "plotly";
       title: string;
-      fig: { data: any[]; layout?: any; config?: any }; // ✅ Plotly JSON
+      fig: { data: any[]; layout?: any; config?: any }; 
     };
 
 export type WorkspaceWindow = {
@@ -30,8 +30,15 @@ export type WorkspaceWindow = {
 type Ctx = {
   windows: WorkspaceWindow[];
   addTableWindow: (title: string, csvText: string) => void;
-  addPlotlyWindow: (title: string, fig: { data: any[]; layout?: any; config?: any }) => void;
-  updateWindow: (id: string, patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>) => void;
+  addCsvTableWindow: (title: string, src: string) => void; 
+  addPlotlyWindow: (
+    title: string,
+    fig: { data: any[]; layout?: any; config?: any },
+  ) => void;
+  updateWindow: (
+    id: string,
+    patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>,
+  ) => void;
   bringToFront: (id: string) => void;
   closeWindow: (id: string) => void;
 };
@@ -43,7 +50,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [zTop, setZTop] = useState(1);
 
   function nextId(prefix: string) {
-    // ✅ 간단 ID 생성(충돌 확률 낮음)
     return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
 
@@ -67,7 +73,30 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ]);
   }
 
-  function addPlotlyWindow(title: string, fig: { data: any[]; layout?: any; config?: any }) {
+  function addCsvTableWindow(title: string, src: string) {
+    const id = nextId("win");
+    const widgetId = nextId("tblurl");
+    const z = zTop + 1;
+    setZTop(z);
+
+    setWindows((prev) => [
+      ...prev,
+      {
+        id,
+        widget: { id: widgetId, type: "tableUrl", title, src },
+        x: 24 + prev.length * 16,
+        y: 24 + prev.length * 16,
+        w: 640,
+        h: 420,
+        z,
+      },
+    ]);
+  }
+
+  function addPlotlyWindow(
+    title: string,
+    fig: { data: any[]; layout?: any; config?: any },
+  ) {
     const id = nextId("win");
     const widgetId = nextId("plt");
     const z = zTop + 1;
@@ -87,8 +116,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ]);
   }
 
-  function updateWindow(id: string, patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>) {
-    setWindows((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)));
+  function updateWindow(
+    id: string,
+    patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>,
+  ) {
+    setWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, ...patch } : w)),
+    );
   }
 
   function bringToFront(id: string) {
@@ -103,15 +137,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }
 
   const value = useMemo<Ctx>(
-    () => ({ windows, addTableWindow, addPlotlyWindow, updateWindow, bringToFront, closeWindow }),
-    [windows]
+    () => ({
+      windows,
+      addTableWindow,
+      addCsvTableWindow, 
+      addPlotlyWindow,
+      updateWindow,
+      bringToFront,
+      closeWindow,
+    }),
+    [windows],
   );
 
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  return (
+    <WorkspaceContext.Provider value={value}>
+      {children}
+    </WorkspaceContext.Provider>
+  );
 }
 
 export function useWorkspace() {
   const ctx = useContext(WorkspaceContext);
-  if (!ctx) throw new Error("useWorkspace must be used within WorkspaceProvider");
+  if (!ctx)
+    throw new Error("useWorkspace must be used within WorkspaceProvider");
   return ctx;
 }

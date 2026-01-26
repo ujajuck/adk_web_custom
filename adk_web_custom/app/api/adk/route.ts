@@ -1,4 +1,3 @@
-// app/api/adk/route.ts
 export async function POST(req: Request) {
   const body = await req.json();
 
@@ -34,11 +33,10 @@ export async function POST(req: Request) {
         userId,
         sessionId,
         newMessage,
-      }), // ✅ upstream body는 문자열로 단 1회만 전송
+      }), 
     });
 
-    // ✅ 응답 body는 "한 번만" 읽는다 (json() 실패 후 text() 재시도 금지)
-    const text = await upstream.text(); // ✅ 여기서 한 번 소비
+    const text = await upstream.text(); 
     let data: any;
     try {
       data = text ? JSON.parse(text) : null;

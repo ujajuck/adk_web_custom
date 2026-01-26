@@ -1,11 +1,4 @@
-type AdkEvent = {
-  content?: {
-    role?: string;
-    parts?: Array<{ text?: string; thought?: boolean }>;
-  };
-  partial?: boolean;
-  finishReason?: string;
-};
+import type { AdkEvent } from "@/components/chat/adkTypes";
 
 export function extractAdkAssistantText(events: unknown): string {
   if (!Array.isArray(events)) return "";
@@ -14,19 +7,16 @@ export function extractAdkAssistantText(events: unknown): string {
 
   for (const ev of events as AdkEvent[]) {
     const role = ev?.content?.role;
-    const parts = ev?.content?.parts ?? [];
-
     if (role !== "model") continue;
 
+    const parts = ev?.content?.parts ?? [];
     for (const p of parts) {
       const t = (p?.text ?? "").trim();
       if (!t) continue;
-      if (p?.thought) continue; // thought=true 제거
+      if (p?.thought) continue;
       texts.push(t);
     }
   }
 
-  if (texts.length === 0) return "";
-
-  return texts.join("\n");
+  return texts.join("\n").trim();
 }

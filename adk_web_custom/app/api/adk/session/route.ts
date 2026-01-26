@@ -1,4 +1,3 @@
-// app/api/adk/session/route.ts
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
 
@@ -27,10 +26,10 @@ export async function POST(req: Request) {
     const upstream = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body.state ?? {}), // ✅ state 초기값(optional)
+      body: JSON.stringify(body.state ?? {}),
     });
 
-    const text = await upstream.text(); // ✅ 한 번만 읽기
+    const text = await upstream.text();
     let data: any;
     try {
       data = text ? JSON.parse(text) : null;

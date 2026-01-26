@@ -1,11 +1,10 @@
-// components/workspace/WorkspacePanel.tsx
 "use client";
 
 import React, { useRef } from "react";
 import { Rnd } from "react-rnd";
 import { useWorkspace } from "./WorkspaceContext";
-import CsvTableWidget from "./widgets/CsvTableWidget";
-import PlotlyFigureWidget from "./widgets/PlotlyFigureWidget";
+import CsvTableFromUrlWidget from "@/components/workspace/widgets/CsvTableFromUrlWidget";
+import PlotlyFigureWidget from "@/components/workspace/widgets/PlotlyFigureWidget";
 
 export default function WorkspacePanel() {
   const { windows, updateWindow, bringToFront, closeWindow } = useWorkspace();
@@ -104,8 +103,9 @@ export default function WorkspacePanel() {
 
           {/* 윈도우 바디 */}
           <div style={{ height: `calc(100% - 40px)`, overflow: "auto" }}>
-            {win.widget.type === "table" ? (
-              <CsvTableWidget csvText={win.widget.csvText} />
+            {
+            win.widget.type === "tableUrl" ? (
+              <CsvTableFromUrlWidget src={win.widget.src} /> // ✅ 추가
             ) : (
               <PlotlyFigureWidget fig={win.widget.fig} />
             )}

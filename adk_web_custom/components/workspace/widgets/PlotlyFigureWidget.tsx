@@ -1,4 +1,3 @@
-// components/workspace/widgets/PlotlyFigureWidget.tsx
 "use client";
 
 import React from "react";
