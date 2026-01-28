@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 import { Check } from "lucide-react";
 import { useWorkspace } from "./WorkspaceContext";
@@ -18,6 +18,9 @@ export default function WorkspacePanel() {
   const HEADER_H = 48;
 
   const isEmpty = useMemo(() => windows.length === 0, [windows.length]);
+
+  // 체크 상태(윈도우별)
+  const [checkedById, setCheckedById] = useState<Record<string, boolean>>({});
 
   const requestBackendToReadFile = (file: ServerFileItem) => {
     // TODO env로 옮겨라
@@ -44,6 +47,19 @@ export default function WorkspacePanel() {
 
   const onSave = () => {
     window.dispatchEvent(new CustomEvent("workspace:save"));
+  };
+
+  const toggleCheck = (winId: string) => {
+    setCheckedById((prev) => {
+      const next = !prev[winId];
+
+      // TODO(기능 추가 예정): 체크 상태 변경 시 실행할 함수 연결
+      // 예: markWindowAsReviewed(winId, next)
+      // 예: runFlowOnCheckedWindows(Object.entries({...}).filter(([_, v]) => v))
+      // 예: persistCheckedStateToStorage(winId, next)
+
+      return { ...prev, [winId]: next };
+    });
   };
 
   return (
@@ -81,88 +97,116 @@ export default function WorkspacePanel() {
         />
 
         {/* 윈도우들 */}
-        {windows.map((win) => (
-          <Rnd
-            key={win.id}
-            bounds="parent"
-            size={{ width: win.w, height: win.h }}
-            position={{ x: win.x, y: win.y }}
-            onDragStart={() => bringToFront(win.id)}
-            onResizeStart={() => bringToFront(win.id)}
-            onDragStop={(_, d) => updateWindow(win.id, { x: d.x, y: d.y })}
-            onResizeStop={(_, __, ref, ___, pos) => {
-              updateWindow(win.id, {
-                w: ref.offsetWidth,
-                h: ref.offsetHeight,
-                x: pos.x,
-                y: pos.y,
-              });
-            }}
-            style={{
-              zIndex: win.z,
-              border: "1px solid #e5e7eb",
-              borderRadius: 12,
-              background: "white",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-              overflow: "hidden",
-            }}
-            minWidth={360}
-            minHeight={240}
-            dragHandleClassName="ws-window-handle"
-          >
-            <div
-              className="ws-window-handle"
-              style={{
-                height: 40,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "0 10px",
-                borderBottom: "1px solid #e5e7eb",
-                cursor: "grab",
-                userSelect: "none",
-                background: "#fff",
+        {windows.map((win) => {
+          const checked = Boolean(checkedById[win.id]);
+
+          return (
+            <Rnd
+              key={win.id}
+              bounds="parent"
+              size={{ width: win.w, height: win.h }}
+              position={{ x: win.x, y: win.y }}
+              onDragStart={() => bringToFront(win.id)}
+              onResizeStart={() => bringToFront(win.id)}
+              onDragStop={(_, d) => updateWindow(win.id, { x: d.x, y: d.y })}
+              onResizeStop={(_, __, ref, ___, pos) => {
+                updateWindow(win.id, {
+                  w: ref.offsetWidth,
+                  h: ref.offsetHeight,
+                  x: pos.x,
+                  y: pos.y,
+                });
               }}
-              onMouseDown={() => bringToFront(win.id)}
+              style={{
+                zIndex: win.z,
+                border: "1px solid #e5e7eb",
+                borderRadius: 12,
+                background: "white",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+                overflow: "hidden",
+              }}
+              minWidth={360}
+              minHeight={240}
+              dragHandleClassName="ws-window-handle"
             >
               <div
+                className="ws-window-handle"
                 style={{
-                  fontWeight: 700,
-                  fontSize: 13,
-                  flex: 1,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
+                  height: 40,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "0 10px",
+                  borderBottom: "1px solid #e5e7eb",
+                  cursor: "grab",
+                  userSelect: "none",
+                  background: "#fff",
                 }}
+                onMouseDown={() => bringToFront(win.id)}
               >
-                {win.widget.title}
-              </div>
-              <Check size={16} />
-              <button
-                onClick={() => closeWindow(win.id)}
-                style={{
-                  border: "1px solid #e5e7eb",
-                  background: "white",
-                  borderRadius: 10,
-                  padding: "6px 10px",
-                  cursor: "pointer",
-                }}
-                aria-label="창 닫기"
-                title="닫기"
-              >
-                ✕
-              </button>
-            </div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 13,
+                    flex: 1,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {win.widget.title}
+                </div>
 
-            <div style={{ height: `calc(100% - 40px)`, overflow: "auto" }}>
-              {win.widget.type === "tableUrl" ? (
-                <CsvTableFromUrlWidget src={win.widget.src} />
-              ) : (
-                <PlotlyFigureWidget fig={win.widget.fig} />
-              )}
-            </div>
-          </Rnd>
-        ))}
+                {/* 체크 토글 버튼 */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleCheck(win.id);
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 30,
+                    height: 30,
+                    borderRadius: 10,
+                    border: "1px solid #e5e7eb",
+                    background: checked ? "white" : "#16a34a",
+                    cursor: "pointer",
+                    color: checked ? "#16a34a" : "#e5e7eb",
+                  }}
+                  aria-label={checked ? "체크 해제" : "체크"}
+                  title={checked ? "체크 해제" : "체크"}
+                >
+                  <Check size={16} />
+                </button>
+
+                <button
+                  onClick={() => closeWindow(win.id)}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    background: "white",
+                    borderRadius: 10,
+                    padding: "6px 10px",
+                    cursor: "pointer",
+                  }}
+                  aria-label="창 닫기"
+                  title="닫기"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ height: `calc(100% - 40px)`, overflow: "auto" }}>
+                {win.widget.type === "tableUrl" ? (
+                  <CsvTableFromUrlWidget src={win.widget.src} />
+                ) : (
+                  <PlotlyFigureWidget fig={win.widget.fig} />
+                )}
+              </div>
+            </Rnd>
+          );
+        })}
       </div>
     </div>
   );
