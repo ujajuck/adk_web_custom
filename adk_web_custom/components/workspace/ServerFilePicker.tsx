@@ -59,23 +59,6 @@ export default function ServerFilePicker(props: {
         }}
       >
         <div style={{ fontWeight: 800, color: "#111827" }}>서버 파일 목록</div>
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={loadFiles}
-          style={{
-            border: "1px solid #e5e7eb",
-            background: "white",
-            borderRadius: 10,
-            padding: "8px 12px",
-            cursor: "pointer",
-            fontWeight: 700,
-            color: "#111827",
-          }}
-          aria-label="파일 목록 새로고침"
-          title="새로고침"
-        >
-          refresh
-        </button>
       </div>
 
       {loadingFiles && <div>불러오는 중...</div>}

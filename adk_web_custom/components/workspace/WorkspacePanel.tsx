@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef } from "react";
 import { Rnd } from "react-rnd";
+import { Check } from "lucide-react";
 import { useWorkspace } from "./WorkspaceContext";
 import CsvTableFromUrlWidget from "@/components/workspace/widgets/CsvTableFromUrlWidget";
 import PlotlyFigureWidget from "@/components/workspace/widgets/PlotlyFigureWidget";
@@ -136,7 +137,7 @@ export default function WorkspacePanel() {
               >
                 {win.widget.title}
               </div>
-
+              <Check size={16} />
               <button
                 onClick={() => closeWindow(win.id)}
                 style={{

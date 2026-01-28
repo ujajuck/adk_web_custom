@@ -37,3 +37,11 @@ def resolve_artifact_path(artifact_locator: dict) -> str:
         raise ValueError("잘못된 artifact 경로입니다.")
 
     return str(path)
+
+MCP_RESOURCE_ROOT = os.environ.get("MCP_RESOURCE_ROOT")
+def get_mcp_resource_path(df, job_id: str) -> Path:
+    p: Path = MCP_RESOURCE_ROOT / f"df_{job_id}.csv"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("w", encoding="utf-8-sig", newline="") as f:
+        df.to_csv(f, index=False, lineterminator="\r\n", na_rep="null")
+    return str(p)

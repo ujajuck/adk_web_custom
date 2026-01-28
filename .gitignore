@@ -1,5 +1,10 @@
-.env
 .adk/*
 *.db
-__pycache__/*
+__pycache__/
 *.pyc
+
+.adk/
+.mcp/
+node_modules/
+.next/
+

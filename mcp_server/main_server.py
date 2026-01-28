@@ -6,8 +6,15 @@ from ml_toolbox.server import ml_toolbox
 
 mcp = FastMCP(name="main_mcp_server")
 
+MCP_RESOURCE_ROOT = "C:/MyFolder/LLM/google-adk/.mcp/resources"
+@mcp.resource("mcp://resources/{job_id}.csv",mime_type="text/csv")
+async def get_job_csv(job_id:str)->bytes:
+    path = MCP_RESOURCE_ROOT /f"{job_id}.csv"
+    if not path.exists() or not path.is_file():
+        raise ValueError("파일이 없다")
+    return path.read_bytes()
+
 async def setup():
-    # ✅ 정적 합치기: prefix로 충돌 방지 + 네임스페이스 효과
     await mcp.import_server(plot_toolbox, prefix="plot")
     # await mcp.import_server(ml_toolbox, prefix="ml")
 

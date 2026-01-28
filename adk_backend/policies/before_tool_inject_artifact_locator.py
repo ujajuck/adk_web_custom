@@ -1,5 +1,3 @@
-# agent/policies/before_tool_inject_artifact_locator_v1.py
-
 from __future__ import annotations
 
 import os
@@ -77,7 +75,6 @@ async def before_tool_inject_artifact_locator(
     # version 보강: 없으면 디스크에서 최신 버전 탐색
     version = locator.get("version")
     if version is None:
-        # ✅ ADK_ARTIFACT_ROOT는 run.py에서 두 프로세스(ADK/MCP)에 동일하게 주입하는 걸 권장
         artifact_root = Path(os.environ.get("ADK_ARTIFACT_ROOT", ".adk")).resolve()
 
         latest = _latest_version_from_disk(artifact_root, session_id=session_id, artifact_name=artifact_name)

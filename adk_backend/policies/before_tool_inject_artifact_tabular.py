@@ -44,7 +44,7 @@ async def before_tool_inject_artifact_tabular(
 
     artifact_filename = args.get("artifact_filename")
     if not isinstance(artifact_filename, str) or not artifact_filename.strip():
-        return None  # 👉 이게 있어서 '모든 툴에 강제 적용' 안 됨
+        return None 
 
     if not artifact_filename.lower().endswith((".csv", ".tsv")):
         return None
