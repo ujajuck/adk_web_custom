@@ -7,10 +7,9 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
   const [csvText, setCsvText] = useState<string>("");
   const [err, setErr] = useState<string>("");
 
-  // 가로 스크롤 동기화를 위한 ref
-  const tableScrollRef = useRef<HTMLDivElement | null>(null); // 실제 테이블(세로+가로) 스크롤 영역
-  const hScrollRef = useRef<HTMLDivElement | null>(null); // 하단 sticky 가로 스크롤바
-  const measureRef = useRef<HTMLTableElement | null>(null); // 테이블 너비 측정용
+  const tableScrollRef = useRef<HTMLDivElement | null>(null); 
+  const hScrollRef = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<HTMLTableElement | null>(null); 
 
   // 하단 스크롤바의 "스크롤 가능한 너비"를 만들기 위한 값
   const [scrollWidth, setScrollWidth] = useState<number>(0);

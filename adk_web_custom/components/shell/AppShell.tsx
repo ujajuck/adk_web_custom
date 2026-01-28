@@ -47,7 +47,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ position: "relative" }}>
-      {/* ✅ 왼쪽 접힘 상태에서도 항상 보이는 “펼치기” 고정 버튼 */}
+      {/*“펼치기” 고정 버튼 */}
       {isLeftCollapsed && (
         <button
           onClick={() => setIsLeftCollapsed(false)}

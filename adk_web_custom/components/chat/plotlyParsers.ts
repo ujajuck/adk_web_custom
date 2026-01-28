@@ -1,12 +1,7 @@
 export type PlotlyFig = { data: any[]; layout?: any; config?: any; frames?: any[] };
 
-/**
- * ADK 이벤트 전체를 DFS로 훑어 FastMCP 툴의 고정 스키마(outputs[0].graph)를 찾아
- * Plotly Figure JSON 문자열을 객체로 파싱해 반환합니다.
- *
- * FastMCP 툴 출력 예:
- * return { "status":"success", "outputs":[ { "graph":"<plotly_json_string>" } ] }
- */
+
+// ADK 이벤트 전체를 DFS로 (outputs[0].graph)를 찾아 Plotly Figure JSON 문자열을 객체로 파싱해 반환
 export function tryExtractPlotlyFig(
   events: unknown,
 ): { title: string; fig: PlotlyFig } | null {
