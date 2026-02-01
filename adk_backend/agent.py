@@ -32,7 +32,8 @@ litellm_model = SafeLiteLlm(
 )
 
 from google.adk.tools.tool_context import ToolContext
-from .callback.before_tool_router import before_tool_callback_router
+from .callback.before_tool_callback_router import before_tool_callback_router
+from .callback.after_tool_callback_router import after_tool_callback_router
 
 async def debug_context(tool_context: ToolContext) -> str:
     """현재 실행 컨텍스트(app/user/session)와 보이는 아티팩트 목록을 반환합니다."""
@@ -62,6 +63,7 @@ root_agent = Agent(
         load_artifacts
     ],
     before_tool_callback=before_tool_callback_router,
+    after_tool_callback=after_tool_callback_router,
     # before_model_callback=before_model_callback
 )
 app = App(

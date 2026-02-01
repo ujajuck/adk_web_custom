@@ -11,7 +11,6 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
   const hScrollRef = useRef<HTMLDivElement | null>(null);
   const measureRef = useRef<HTMLTableElement | null>(null); 
 
-  // 하단 스크롤바의 "스크롤 가능한 너비"를 만들기 위한 값
   const [scrollWidth, setScrollWidth] = useState<number>(0);
 
   useEffect(() => {
@@ -49,7 +48,6 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
     return { columns, rows, parseErr };
   }, [csvText]);
 
-  // 테이블 렌더 후 실제 scrollWidth 측정해서 하단 스크롤바에 반영
   useEffect(() => {
     if (!csvText) return;
 
@@ -58,11 +56,9 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
       const containerEl = tableScrollRef.current;
       if (!tableEl || !containerEl) return;
 
-      // 실제 테이블 전체 너비(가로 스크롤 대상)
       const w = tableEl.scrollWidth;
       setScrollWidth(w);
 
-      // 하단 스크롤바의 scrollLeft를 현재 테이블 scrollLeft와 맞춤
       if (hScrollRef.current) {
         hScrollRef.current.scrollLeft = containerEl.scrollLeft;
       }
@@ -70,12 +66,10 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
 
     update();
 
-    // 창 리사이즈 시 재측정
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, [csvText, parsed.columns.length, parsed.rows.length]);
 
-  // 테이블 스크롤 -> 하단 스크롤바로 동기화
   const onTableScroll = () => {
     const tableEl = tableScrollRef.current;
     const hEl = hScrollRef.current;
@@ -83,7 +77,6 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
     hEl.scrollLeft = tableEl.scrollLeft;
   };
 
-  // 하단 스크롤바 -> 테이블로 동기화
   const onHScroll = () => {
     const tableEl = tableScrollRef.current;
     const hEl = hScrollRef.current;
@@ -178,7 +171,7 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
         style={{
           border: "1px solid #e5e7eb",
           borderRadius: 10,
-          overflow: "hidden", // sticky 스크롤바가 테두리 밖으로 안 나가게
+          overflow: "hidden", 
         }}
       >
         {/* 실제 테이블 스크롤 영역 (세로/가로) */}
@@ -187,7 +180,7 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
           onScroll={onTableScroll}
           style={{
             overflow: "auto",
-            maxHeight: 520, // 필요 시 조절(세로 스크롤 생기게)
+            maxHeight: 520, 
           }}
         >
           <table

@@ -30,7 +30,7 @@ def resolve_artifact_path(artifact_locator: dict) -> str:
         / file_name
     )
 
-    # 🔒 path traversal 방어
+    # path traversal 방어
     path = path.resolve()
     root = Path(ADK_ARTIFACT_ROOT).resolve()
     if root not in path.parents:
@@ -40,8 +40,9 @@ def resolve_artifact_path(artifact_locator: dict) -> str:
 
 MCP_RESOURCE_ROOT = os.environ.get("MCP_RESOURCE_ROOT")
 def get_mcp_resource_path(df, job_id: str) -> Path:
-    p: Path = MCP_RESOURCE_ROOT / f"df_{job_id}.csv"
+    p: Path = MCP_RESOURCE_ROOT / f"{job_id}.csv"
     p.parent.mkdir(parents=True, exist_ok=True)
+    #TODO 어떤 파일 형태든 저장하도록 수정
     with p.open("w", encoding="utf-8-sig", newline="") as f:
         df.to_csv(f, index=False, lineterminator="\r\n", na_rep="null")
-    return str(p)
+    return 
