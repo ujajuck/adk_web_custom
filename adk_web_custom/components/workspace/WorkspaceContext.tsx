@@ -7,14 +7,15 @@ export type WorkspaceWidget =
       id: string;
       type: "table";
       title: string;
-      csvText: string; 
+      csvText: string;
     }
-  | { id: string; type: "tableUrl"; title: string; src: string } 
+  | { id: string; type: "tableUrl"; title: string; src: string }
+  | { id: string; type: "csvFile"; title: string; fileId: string }
   | {
       id: string;
       type: "plotly";
       title: string;
-      fig: { data: any[]; layout?: any; config?: any }; 
+      fig: { data: any[]; layout?: any; config?: any };
     };
 
 export type WorkspaceWindow = {
@@ -30,7 +31,8 @@ export type WorkspaceWindow = {
 type Ctx = {
   windows: WorkspaceWindow[];
   addTableWindow: (title: string, csvText: string) => void;
-  addCsvTableWindow: (title: string, src: string) => void; 
+  addCsvTableWindow: (title: string, src: string) => void;
+  addCsvFileWindow: (title: string, fileId: string) => void;
   addPlotlyWindow: (
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
@@ -93,6 +95,26 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ]);
   }
 
+  function addCsvFileWindow(title: string, fileId: string) {
+    const id = nextId("win");
+    const widgetId = nextId("csvf");
+    const z = zTop + 1;
+    setZTop(z);
+
+    setWindows((prev) => [
+      ...prev,
+      {
+        id,
+        widget: { id: widgetId, type: "csvFile", title, fileId },
+        x: 24 + prev.length * 16,
+        y: 24 + prev.length * 16,
+        w: 640,
+        h: 420,
+        z,
+      },
+    ]);
+  }
+
   function addPlotlyWindow(
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
@@ -140,7 +162,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     () => ({
       windows,
       addTableWindow,
-      addCsvTableWindow, 
+      addCsvTableWindow,
+      addCsvFileWindow,
       addPlotlyWindow,
       updateWindow,
       bringToFront,

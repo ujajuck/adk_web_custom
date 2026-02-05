@@ -5,6 +5,7 @@ import { Rnd } from "react-rnd";
 import { Check } from "lucide-react";
 import { useWorkspace } from "./WorkspaceContext";
 import CsvTableFromUrlWidget from "@/components/workspace/widgets/CsvTableFromUrlWidget";
+import CsvFileWidget from "@/components/workspace/widgets/CsvFileWidget";
 import PlotlyFigureWidget from "@/components/workspace/widgets/PlotlyFigureWidget";
 import WorkspaceTopBar from "@/components/workspace/WorkspaceTopBar";
 import ServerFilePicker, {
@@ -37,7 +38,6 @@ export default function WorkspacePanel() {
   };
 
   const onRefresh = () => {
-    // TODO 이벤트 연결
     window.dispatchEvent(new CustomEvent("workspace:refresh"));
   };
 
@@ -52,15 +52,23 @@ export default function WorkspacePanel() {
   const toggleCheck = (winId: string) => {
     setCheckedById((prev) => {
       const next = !prev[winId];
-
-      // TODO(기능 추가 예정): 체크 상태 변경 시 실행할 함수 연결
-      // 예: markWindowAsReviewed(winId, next)
-      // 예: runFlowOnCheckedWindows(Object.entries({...}).filter(([_, v]) => v))
-      // 예: persistCheckedStateToStorage(winId, next)
-
       return { ...prev, [winId]: next };
     });
   };
+
+  function renderWidget(win: (typeof windows)[number]) {
+    const w = win.widget;
+    switch (w.type) {
+      case "tableUrl":
+        return <CsvTableFromUrlWidget src={w.src} />;
+      case "csvFile":
+        return <CsvFileWidget fileId={w.fileId} />;
+      case "plotly":
+        return <PlotlyFigureWidget fig={w.fig} />;
+      default:
+        return <div style={{ padding: 12, color: "#6b7280" }}>unknown widget</div>;
+    }
+  }
 
   return (
     <div
@@ -198,11 +206,7 @@ export default function WorkspacePanel() {
               </div>
 
               <div style={{ height: `calc(100% - 40px)`, overflow: "auto" }}>
-                {win.widget.type === "tableUrl" ? (
-                  <CsvTableFromUrlWidget src={win.widget.src} />
-                ) : (
-                  <PlotlyFigureWidget fig={win.widget.fig} />
-                )}
+                {renderWidget(win)}
               </div>
             </Rnd>
           );

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
-import { extractArtifactDelta } from "@/components/chat/extractArtifactDelta";
 import type { Msg } from "@/components/chat/adkTypes";
-import { extractAdkAssistantText } from "@/components/chat/adkParsers";
-import { tryExtractPlotlyFig } from "@/components/chat/plotlyParsers";
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8080";
 
 type WorkspaceSendDetail = {
   text: string;
@@ -13,7 +14,7 @@ type WorkspaceSendDetail = {
 };
 
 export default function ChatPanel() {
-  const { addPlotlyWindow, addCsvTableWindow } = useWorkspace();
+  const { addPlotlyWindow, addCsvFileWindow } = useWorkspace();
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -45,33 +46,49 @@ export default function ChatPanel() {
       { role: "assistant", text: `세션 생성 중… (${id})` },
     ]);
 
-    const res = await fetch("/api/adk/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userId: id, sessionId: id }),
-    });
+    try {
+      const res = await fetch(`${API_URL}/api/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          user_id: id,
+          session_id: id,
+          session_name: "",
+        }),
+      });
 
-    const json = await res.json().catch(() => null);
+      const json = await res.json().catch(() => null);
 
-    if (json?.ok !== true) {
+      if (!res.ok || !json?.session_id) {
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            text: `세션 생성 실패: ${json?.detail ?? "unknown"}`,
+          },
+        ]);
+        setUserId("");
+        setSessionId("");
+        throw new Error("session create failed");
+      }
+
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", text: `세션 생성됨: ${id}` },
+      ]);
+      return { userId: id, sessionId: id };
+    } catch (e: any) {
       setMessages((m) => [
         ...m,
         {
           role: "assistant",
-          text: `세션 생성 실패: upstream=${json?.status ?? "?"} / ${json?.data?.detail ?? json?.error ?? "unknown"}`,
+          text: `세션 생성 실패: ${String(e?.message ?? e)}`,
         },
       ]);
-
       setUserId("");
       setSessionId("");
-      throw new Error("session create failed");
+      throw e;
     }
-
-    setMessages((m) => [
-      ...m,
-      { role: "assistant", text: `세션 생성됨: ${id}` },
-    ]);
-    return { userId: id, sessionId: id };
   }, []);
 
   // 세션이 없으면 자동 생성 (최초 진입 시)
@@ -100,71 +117,73 @@ export default function ChatPanel() {
       setInput("");
 
       try {
-        const res = await fetch("/api/adk", {
+        const res = await fetch(`${API_URL}/api/chat`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            userId: sess.userId,
-            sessionId: sess.sessionId,
-            newMessage: { role: "user", parts: [{ text: t }] },
+            user_id: sess.userId,
+            session_id: sess.sessionId,
+            message: t,
           }),
         });
 
         const json = await res.json().catch(() => null);
-        console.log(json);
+        console.log("[chat response]", json);
 
-        const events = json?.data;
-        const delta = extractArtifactDelta(events);
-
-        for (const [filename, version] of Object.entries(delta)) {
-          const params = new URLSearchParams({
-            userId: sess.userId,
-            sessionId: sess.sessionId,
-            filename,
-            version: String(version),
-          });
-
-          const pubApp = (process.env.ADK_APP_NAME ?? "").trim();
-          if (pubApp) params.set("appName", pubApp);
-
-          const csvUrl = `/api/adk/artifacts/csv?${params.toString()}`;
-          console.log("[csvUrl]", csvUrl);
-
-          addCsvTableWindow(`CSV: ${filename} (v${version})`, csvUrl);
+        if (!res.ok) {
           setMessages((m) => [
             ...m,
             {
               role: "assistant",
-              text: `📄 CSV 테이블을 워크스페이스에 열었어요: ${filename} v${version}`,
+              text: `요청 실패 (${res.status}): ${json?.detail ?? "unknown"}`,
             },
           ]);
+          return;
         }
 
-        const foundFig = tryExtractPlotlyFig(events);
-        console.log("그래프 찾음 ", foundFig);
-        if (foundFig) {
-          addPlotlyWindow(foundFig.title, foundFig.fig);
+        // CSV files → open workspace windows
+        if (json?.csv_files?.length) {
+          for (const csv of json.csv_files) {
+            addCsvFileWindow(
+              `CSV: ${csv.filename} (${csv.total_rows} rows)`,
+              csv.file_id,
+            );
+            setMessages((m) => [
+              ...m,
+              {
+                role: "assistant",
+                text: `CSV 테이블을 워크스페이스에 열었어요: ${csv.filename} (${csv.total_rows}행)`,
+              },
+            ]);
+          }
+        }
+
+        // Plotly figures → open workspace windows
+        if (json?.plotly_figs?.length) {
+          for (const pf of json.plotly_figs) {
+            addPlotlyWindow(pf.title, pf.fig);
+            setMessages((m) => [
+              ...m,
+              {
+                role: "assistant",
+                text: `그래프를 워크스페이스에 열었어요: ${pf.title}`,
+              },
+            ]);
+          }
+        }
+
+        // Assistant text
+        if (json?.text) {
+          setMessages((m) => [
+            ...m,
+            { role: "assistant", text: json.text },
+          ]);
+        } else if (!json?.csv_files?.length && !json?.plotly_figs?.length) {
           setMessages((m) => [
             ...m,
             {
               role: "assistant",
-              text: `📈 그래프를 워크스페이스에 열었어요: ${foundFig.title}`,
-            },
-          ]);
-        }
-
-        const assistantText = extractAdkAssistantText(events);
-        if (assistantText) {
-          setMessages((m) => [
-            ...m,
-            { role: "assistant", text: assistantText },
-          ]);
-        } else if (!foundFig) {
-          setMessages((m) => [
-            ...m,
-            {
-              role: "assistant",
-              text: `응답 파싱 실패(텍스트 없음)\n${JSON.stringify(events, null, 2)}`,
+              text: `응답 파싱 실패(텍스트 없음)\n${JSON.stringify(json, null, 2)}`,
             },
           ]);
         }
@@ -177,14 +196,14 @@ export default function ChatPanel() {
         setIsSending(false);
       }
     },
-    [isSending, ensureSession, addCsvTableWindow, addPlotlyWindow],
+    [isSending, ensureSession, addCsvFileWindow, addPlotlyWindow],
   );
 
   async function send() {
     await sendTextToAdk(input);
   }
 
-  // WorkspacePanel에서 보낸 이벤트(adk:chat:send)를 받아서 /api/adk로 전송
+  // WorkspacePanel에서 보낸 이벤트(adk:chat:send)를 받아서 /api/chat로 전송
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<WorkspaceSendDetail>;
@@ -193,7 +212,6 @@ export default function ChatPanel() {
       const baseText = (detail?.text ?? "").trim();
       if (!baseText) return;
 
-      // fileName이 있으면 텍스트에 확실히 포함(툴 파싱 안정화)
       const fileNameLine = detail.fileName
         ? `파일명: ${detail.fileName}\n`
         : "";
