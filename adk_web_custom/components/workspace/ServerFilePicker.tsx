@@ -2,7 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 
-export type ServerFileItem = { name: string; url: string };
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8080";
+
+export type ServerFileItem = { name: string; url?: string; size?: number };
 
 export default function ServerFilePicker(props: {
   enabled: boolean; // windows.length === 0 일 때만 true
@@ -17,7 +21,7 @@ export default function ServerFilePicker(props: {
       setFilesErr("");
       setLoadingFiles(true);
 
-      const res = await fetch("/api/adk/workspace/files", {
+      const res = await fetch(`${API_URL}/api/files`, {
         cache: "no-store",
       });
       if (!res.ok) {
