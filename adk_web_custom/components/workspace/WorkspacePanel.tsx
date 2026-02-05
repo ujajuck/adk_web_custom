@@ -2,7 +2,9 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { useWorkspace } from "./WorkspaceContext";
 import CsvTableFromUrlWidget from "@/components/workspace/widgets/CsvTableFromUrlWidget";
 import CsvFileWidget from "@/components/workspace/widgets/CsvFileWidget";
@@ -20,11 +22,9 @@ export default function WorkspacePanel() {
 
   const isEmpty = useMemo(() => windows.length === 0, [windows.length]);
 
-  // 체크 상태(윈도우별)
   const [checkedById, setCheckedById] = useState<Record<string, boolean>>({});
 
   const requestBackendToReadFile = (file: ServerFileItem) => {
-    // TODO env로 옮겨라
     const text = `C:\\MyFolder\\data\\${file.name}\n이 파일을 읽어줘`;
 
     window.dispatchEvent(
@@ -66,22 +66,17 @@ export default function WorkspacePanel() {
       case "plotly":
         return <PlotlyFigureWidget fig={w.fig} />;
       default:
-        return <div style={{ padding: 12, color: "#6b7280" }}>unknown widget</div>;
+        return (
+          <div className="p-3 text-muted-foreground">unknown widget</div>
+        );
     }
   }
 
   return (
     <div
       ref={boundsRef}
-      style={{
-        position: "relative",
-        height: "100%",
-        minHeight: "100dvh",
-        overflow: "hidden",
-        background: "#fafafa",
-      }}
+      className="relative h-full min-h-dvh overflow-hidden bg-muted/30"
     >
-      {/* 침범 불가 상단 헤더 */}
       <WorkspaceTopBar
         height={HEADER_H}
         onRefresh={onRefresh}
@@ -89,22 +84,18 @@ export default function WorkspacePanel() {
         onSave={onSave}
       />
 
-      {/* 헤더 아래가 "parent"가 되도록 본문 컨테이너 분리 */}
       <div
+        className="relative overflow-hidden"
         style={{
-          position: "relative",
           height: `calc(100% - ${HEADER_H}px)`,
           minHeight: `calc(100dvh - ${HEADER_H}px)`,
-          overflow: "hidden",
         }}
       >
-        {/* windows가 없을 때 파일 선택 UI */}
         <ServerFilePicker
           enabled={isEmpty}
           onSelect={requestBackendToReadFile}
         />
 
-        {/* 윈도우들 */}
         {windows.map((win) => {
           const checked = Boolean(checkedById[win.id]);
 
@@ -125,87 +116,55 @@ export default function WorkspacePanel() {
                   y: pos.y,
                 });
               }}
-              style={{
-                zIndex: win.z,
-                border: "1px solid #e5e7eb",
-                borderRadius: 12,
-                background: "white",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-                overflow: "hidden",
-              }}
+              style={{ zIndex: win.z }}
+              className="rounded-xl border bg-card shadow-lg overflow-hidden"
               minWidth={360}
               minHeight={240}
               dragHandleClassName="ws-window-handle"
             >
+              {/* window title bar */}
               <div
-                className="ws-window-handle"
-                style={{
-                  height: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "0 10px",
-                  borderBottom: "1px solid #e5e7eb",
-                  cursor: "grab",
-                  userSelect: "none",
-                  background: "#fff",
-                }}
+                className="ws-window-handle h-10 flex items-center gap-2 px-2.5 border-b bg-card cursor-grab select-none"
                 onMouseDown={() => bringToFront(win.id)}
               >
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 13,
-                    flex: 1,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
+                <span className="font-bold text-[13px] flex-1 truncate">
                   {win.widget.title}
-                </div>
+                </span>
 
-                {/* 체크 토글 버튼 */}
-                <button
+                {/* check toggle */}
+                <Button
+                  variant="outline"
+                  size="icon"
                   onClick={(e) => {
                     e.stopPropagation();
                     toggleCheck(win.id);
                   }}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 30,
-                    height: 30,
-                    borderRadius: 10,
-                    border: "1px solid #e5e7eb",
-                    background: checked ? "white" : "#16a34a",
-                    cursor: "pointer",
-                    color: checked ? "#16a34a" : "#e5e7eb",
-                  }}
                   aria-label={checked ? "체크 해제" : "체크"}
                   title={checked ? "체크 해제" : "체크"}
+                  className={cn(
+                    "h-7 w-7 shrink-0",
+                    checked
+                      ? "border-success text-success"
+                      : "bg-success text-success-foreground border-success hover:bg-success/90",
+                  )}
                 >
-                  <Check size={16} />
-                </button>
+                  <Check size={14} />
+                </Button>
 
-                <button
+                {/* close */}
+                <Button
+                  variant="outline"
+                  size="icon"
                   onClick={() => closeWindow(win.id)}
-                  style={{
-                    border: "1px solid #e5e7eb",
-                    background: "white",
-                    borderRadius: 10,
-                    padding: "6px 10px",
-                    cursor: "pointer",
-                  }}
                   aria-label="창 닫기"
                   title="닫기"
+                  className="h-7 w-7 shrink-0"
                 >
-                  ✕
-                </button>
+                  <X size={14} />
+                </Button>
               </div>
 
-              <div style={{ height: `calc(100% - 40px)`, overflow: "auto" }}>
+              <div className="h-[calc(100%-40px)] overflow-auto">
                 {renderWidget(win)}
               </div>
             </Rnd>

@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Send, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import type { Msg } from "@/components/chat/adkTypes";
 
@@ -141,7 +147,7 @@ export default function ChatPanel() {
           return;
         }
 
-        // CSV files → open workspace windows
+        // CSV files
         if (json?.csv_files?.length) {
           for (const csv of json.csv_files) {
             addCsvFileWindow(
@@ -158,7 +164,7 @@ export default function ChatPanel() {
           }
         }
 
-        // Plotly figures → open workspace windows
+        // Plotly figures
         if (json?.plotly_figs?.length) {
           for (const pf of json.plotly_figs) {
             addPlotlyWindow(pf.title, pf.fig);
@@ -229,84 +235,49 @@ export default function ChatPanel() {
 
   if (!hasSession) {
     return (
-      <div
-        style={{
-          height: "100%",
-          display: "grid",
-          placeItems: "center",
-          padding: 12,
-          color: "#6b7280",
-        }}
-      >
+      <div className="h-full grid place-items-center p-3 text-muted-foreground">
         세션 준비 중…
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "grid",
-        gridTemplateRows: "auto 1fr auto",
-      }}
-    >
+    <div className="h-full grid grid-rows-[auto_1fr_auto]">
       {/* 상단: 세션 표시 */}
-      <div
-        style={{
-          padding: "10px 12px",
-          borderBottom: "1px solid #e5e7eb",
-          background: "#fafafa",
-          fontSize: 12,
-          color: "#6b7280",
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-        }}
-      >
+      <div className="px-3 py-2.5 border-b bg-muted/50 text-xs text-muted-foreground flex items-center gap-2">
         <span>session:</span>
-        <code
-          style={{
-            padding: "2px 6px",
-            background: "white",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-          }}
-        >
+        <Badge variant="outline" className="font-mono text-[11px]">
           {sessionId}
-        </code>
-        <div style={{ flex: 1 }} />
-        {isSending && <span>전송 중…</span>}
+        </Badge>
+        <div className="flex-1" />
+        {isSending && (
+          <span className="flex items-center gap-1">
+            <Loader2 size={12} className="animate-spin" />
+            전송 중…
+          </span>
+        )}
       </div>
 
       {/* 메시지 영역 */}
-      <div ref={scrollerRef} style={{ padding: 12, overflow: "auto" }}>
+      <div ref={scrollerRef} className="p-3 overflow-auto space-y-2.5">
         {messages.map((m, i) => {
           const isUser = m.role === "user";
 
           return (
             <div
               key={i}
-              style={{
-                display: "flex",
-                justifyContent: isUser ? "flex-end" : "flex-start",
-                marginBottom: 10,
-              }}
+              className={cn(
+                "flex",
+                isUser ? "justify-end" : "justify-start",
+              )}
             >
               <div
-                style={{
-                  maxWidth: "78%",
-                  padding: "10px 14px",
-                  borderRadius: 16,
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.45,
-                  fontSize: 14,
-                  background: isUser ? "#2563eb" : "#f3f4f6",
-                  color: isUser ? "white" : "#111827",
-                  borderTopRightRadius: isUser ? 4 : 16,
-                  borderTopLeftRadius: isUser ? 16 : 4,
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
-                }}
+                className={cn(
+                  "max-w-[78%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap shadow-sm",
+                  isUser
+                    ? "bg-blue-600 text-white rounded-2xl rounded-tr-sm"
+                    : "bg-muted text-foreground rounded-2xl rounded-tl-sm",
+                )}
               >
                 {m.text}
               </div>
@@ -316,46 +287,27 @@ export default function ChatPanel() {
       </div>
 
       {/* 입력 영역 */}
-      <div
-        style={{
-          padding: 12,
-          borderTop: "1px solid #e5e7eb",
-          display: "flex",
-          gap: 8,
-          background: "#fafafa",
-        }}
-      >
-        <input
+      <div className="p-3 border-t bg-muted/50 flex items-center gap-2">
+        <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          style={{
-            flex: 1,
-            padding: "12px 14px",
-            borderRadius: 14,
-            border: "1px solid #e5e7eb",
-            outline: "none",
-            fontSize: 14,
-            background: "white",
-          }}
           placeholder="메시지를 입력하세요…"
           disabled={isSending}
+          className="flex-1 h-10 rounded-xl bg-background"
         />
-        <button
+        <Button
           onClick={send}
           disabled={isSending}
-          style={{
-            padding: "0 16px",
-            borderRadius: 14,
-            border: "none",
-            background: isSending ? "#93c5fd" : "#2563eb",
-            color: "white",
-            fontWeight: 700,
-            cursor: isSending ? "not-allowed" : "pointer",
-          }}
+          size="icon"
+          className="h-10 w-10 rounded-xl bg-blue-600 hover:bg-blue-700 shrink-0"
         >
-          전송
-        </button>
+          {isSending ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Send size={16} />
+          )}
+        </Button>
       </div>
     </div>
   );

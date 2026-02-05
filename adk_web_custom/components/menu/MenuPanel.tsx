@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { ChevronLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Props = {
   collapsed: boolean;
@@ -36,96 +39,63 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
   if (collapsed) return null;
 
   return (
-    <div
-      style={{
-        height: "100%",
-        position: "relative",
-        display: "grid",
-        gridTemplateRows: "auto auto 1fr",
-      }}
-    >
+    <div className="h-full relative grid grid-rows-[auto_1fr]">
       {/* 헤더 */}
-      <div
-        style={{ padding: 12, display: "flex", alignItems: "center", gap: 8 }}
-      >
-        <div style={{ fontWeight: 700 }}>Home</div>
+      <div className="p-3 flex items-center gap-2">
+        <span className="font-bold text-foreground">Home</span>
       </div>
 
       {/* 목록 */}
-      <div style={{ overflow: "auto", padding: "0 8px 56px 8px" }}>
-        {/* 아래 버튼과 겹치지 않도록 bottom padding 확보(56px) */}
-        <div style={{ padding: "6px 8px", fontSize: 12, color: "#6b7280" }}>
-          Notebook
-        </div>
+      <ScrollArea className="px-2 pb-14">
+        <p className="px-2 py-1.5 text-xs text-muted-foreground">Notebook</p>
 
         {my_notebook.map((s) => (
           <button
             key={s.id}
             onClick={() => console.log("select session:", s.id)}
-            style={{
-              width: "100%",
-              textAlign: "left",
-              padding: 10,
-              margin: "0 4px 8px",
-              borderRadius: 12,
-              border: "1px solid #e5e7eb",
-              background: "white",
-              cursor: "pointer",
-            }}
+            className="w-full text-left p-2.5 mx-1 mb-2 rounded-xl border bg-card hover:bg-accent transition-colors cursor-pointer"
           >
-            <div style={{ fontWeight: 600 }}>{s.title}</div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div className="font-semibold text-sm text-card-foreground">
+              {s.title}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
               {s.id} · {s.updatedAt}
             </div>
           </button>
         ))}
-        
-        <div style={{ padding: "6px 8px", fontSize: 12, color: "#6b7280" }}>
+
+        <p className="px-2 py-1.5 text-xs text-muted-foreground">
           Shared Notebook
-        </div>
+        </p>
 
         {shared_notebook.map((s) => (
           <button
             key={s.id}
             onClick={() => console.log("select session:", s.id)}
-            style={{
-              width: "100%",
-              textAlign: "left",
-              padding: 10,
-              margin: "0 4px 8px",
-              borderRadius: 12,
-              border: "1px solid #e5e7eb",
-              background: "white",
-              cursor: "pointer",
-            }}
+            className="w-full text-left p-2.5 mx-1 mb-2 rounded-xl border bg-card hover:bg-accent transition-colors cursor-pointer"
           >
-            <div style={{ fontWeight: 600 }}>{s.title}</div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div className="font-semibold text-sm text-card-foreground">
+              {s.title}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
               {s.id} · {s.updatedAt}
             </div>
           </button>
         ))}
-      </div>
+      </ScrollArea>
 
       {/* 접기 버튼 */}
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         onClick={onCollapse}
         aria-label="메뉴 접기"
         title="메뉴 접기"
-        style={{
-          position: "absolute",
-          right: 12,
-          bottom: 12,
-          padding: "10px 12px",
-          borderRadius: 12,
-          border: "1px solid #e5e7eb",
-          background: "white",
-          boxShadow: "0 6px 20px rgba(0,0,0,0.08)",
-          cursor: "pointer",
-        }}
+        className="absolute right-3 bottom-3 shadow-lg gap-1"
       >
-        ◀ 접기
-      </button>
+        <ChevronLeft size={16} />
+        접기
+      </Button>
     </div>
   );
 }

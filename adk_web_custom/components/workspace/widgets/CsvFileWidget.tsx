@@ -1,6 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
@@ -56,7 +67,6 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
     fetchPage(offset);
   }, [fetchPage, offset]);
 
-  // sync horizontal scroll width
   useEffect(() => {
     if (!page) return;
     const update = () => {
@@ -92,134 +102,65 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
   const currentPage = page ? Math.floor(offset / PAGE_SIZE) + 1 : 0;
 
   if (err)
-    return <div style={{ padding: 12, color: "#b91c1c" }}>{err}</div>;
+    return <div className="p-3 text-destructive text-sm">{err}</div>;
 
   if (!page && loading)
     return (
-      <div style={{ padding: 12, color: "#6b7280" }}>CSV 불러오는 중…</div>
+      <div className="p-3 text-muted-foreground flex items-center gap-2">
+        <Loader2 size={14} className="animate-spin" />
+        CSV 불러오는 중…
+      </div>
     );
 
   if (!page)
-    return (
-      <div style={{ padding: 12, color: "#6b7280" }}>데이터 없음</div>
-    );
+    return <div className="p-3 text-muted-foreground">데이터 없음</div>;
 
   return (
-    <div style={{ padding: 12 }}>
+    <div className="p-3">
       {/* 상단 바 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            onClick={downloadCsv}
-            title="CSV 다운로드"
-            style={{
-              fontSize: 12,
-              padding: "6px 10px",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              background: "white",
-              cursor: "pointer",
-            }}
-          >
-            다운로드
-          </button>
-        </div>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <Button variant="outline" size="sm" onClick={downloadCsv} title="CSV 다운로드">
+          <Download size={14} />
+          다운로드
+        </Button>
 
-        <div style={{ fontSize: 12, color: "#6b7280" }}>
+        <Badge variant="secondary" className="text-xs font-normal">
           rows: {page.total_rows} · cols: {page.columns.length}
-        </div>
+        </Badge>
       </div>
 
       {/* 테이블 */}
-      <div
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 10,
-          overflow: "hidden",
-        }}
-      >
+      <div className="rounded-lg border overflow-hidden">
         <div
           ref={tableScrollRef}
           onScroll={onTableScroll}
-          style={{ overflow: "auto", maxHeight: 420 }}
+          className="overflow-auto max-h-[420px]"
         >
-          <table
-            ref={measureRef}
-            style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}
-          >
-            <thead
-              style={{
-                position: "sticky",
-                top: 0,
-                background: "white",
-                zIndex: 1,
-              }}
-            >
+          <table ref={measureRef} className="w-full text-[13px] border-collapse">
+            <thead className="sticky top-0 bg-card z-[1]">
               <tr>
-                <th
-                  style={{
-                    textAlign: "center",
-                    padding: 10,
-                    borderBottom: "1px solid #e5e7eb",
-                    whiteSpace: "nowrap",
-                    color: "#6b7280",
-                    fontSize: 11,
-                    minWidth: 40,
-                  }}
-                >
+                <TableHead className="text-center text-[11px] text-muted-foreground min-w-[40px]">
                   #
-                </th>
+                </TableHead>
                 {page.columns.map((c) => (
-                  <th
-                    key={c}
-                    style={{
-                      textAlign: "left",
-                      padding: 10,
-                      borderBottom: "1px solid #e5e7eb",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <TableHead key={c} className="whitespace-nowrap">
                     {c}
-                  </th>
+                  </TableHead>
                 ))}
               </tr>
             </thead>
             <tbody>
               {page.rows.map((r, i) => (
-                <tr key={i}>
-                  <td
-                    style={{
-                      padding: 10,
-                      borderBottom: "1px solid #f3f4f6",
-                      textAlign: "center",
-                      color: "#9ca3af",
-                      fontSize: 11,
-                    }}
-                  >
+                <TableRow key={i}>
+                  <TableCell className="text-center text-[11px] text-muted-foreground">
                     {offset + i + 1}
-                  </td>
+                  </TableCell>
                   {page.columns.map((c) => (
-                    <td
-                      key={c}
-                      style={{
-                        padding: 10,
-                        borderBottom: "1px solid #f3f4f6",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <TableCell key={c} className="whitespace-nowrap">
                       {r?.[c] != null ? String(r[c]) : ""}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
             </tbody>
           </table>
@@ -229,14 +170,7 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
         <div
           ref={hScrollRef}
           onScroll={onHScroll}
-          style={{
-            position: "sticky",
-            bottom: 0,
-            overflowX: "auto",
-            overflowY: "hidden",
-            background: "white",
-            borderTop: "1px solid #f3f4f6",
-          }}
+          className="sticky bottom-0 overflow-x-auto overflow-y-hidden bg-card border-t"
         >
           <div style={{ width: scrollWidth, height: 14 }} />
         </div>
@@ -244,56 +178,36 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
 
       {/* 페이지네이션 */}
       {totalPages > 1 && (
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            fontSize: 12,
-          }}
-        >
-          <button
+        <div className="mt-2 flex items-center justify-center gap-2.5 text-xs">
+          <Button
+            variant="outline"
+            size="sm"
             disabled={offset === 0 || loading}
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            style={{
-              padding: "4px 10px",
-              borderRadius: 6,
-              border: "1px solid #e5e7eb",
-              background: "white",
-              cursor: offset === 0 || loading ? "not-allowed" : "pointer",
-              opacity: offset === 0 || loading ? 0.4 : 1,
-            }}
+            className="h-7 px-2.5"
           >
+            <ChevronLeft size={14} />
             이전
-          </button>
-          <span style={{ color: "#6b7280" }}>
+          </Button>
+          <span className="text-muted-foreground tabular-nums">
             {currentPage} / {totalPages}
           </span>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             disabled={offset + PAGE_SIZE >= page.total_rows || loading}
             onClick={() => setOffset(offset + PAGE_SIZE)}
-            style={{
-              padding: "4px 10px",
-              borderRadius: 6,
-              border: "1px solid #e5e7eb",
-              background: "white",
-              cursor:
-                offset + PAGE_SIZE >= page.total_rows || loading
-                  ? "not-allowed"
-                  : "pointer",
-              opacity:
-                offset + PAGE_SIZE >= page.total_rows || loading ? 0.4 : 1,
-            }}
+            className="h-7 px-2.5"
           >
             다음
-          </button>
+            <ChevronRight size={14} />
+          </Button>
         </div>
       )}
 
       {loading && (
-        <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280", textAlign: "center" }}>
+        <div className="mt-1.5 text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
+          <Loader2 size={12} className="animate-spin" />
           로딩 중…
         </div>
       )}

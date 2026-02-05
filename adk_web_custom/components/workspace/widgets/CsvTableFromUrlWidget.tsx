@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, Pencil } from "lucide-react";
 import Papa from "papaparse";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { TableHead, TableRow, TableCell } from "@/components/ui/table";
 
 export default function CsvTableFromUrlWidget({ src }: { src: string }) {
   const [csvText, setCsvText] = useState<string>("");
   const [err, setErr] = useState<string>("");
 
-  const tableScrollRef = useRef<HTMLDivElement | null>(null); 
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const hScrollRef = useRef<HTMLDivElement | null>(null);
-  const measureRef = useRef<HTMLTableElement | null>(null); 
+  const measureRef = useRef<HTMLTableElement | null>(null);
 
   const [scrollWidth, setScrollWidth] = useState<number>(0);
 
@@ -85,7 +89,6 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
   };
 
   const downloadCsv = () => {
-    // CSV 텍스트를 Blob으로 만들어 다운로드
     const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 
@@ -100,160 +103,85 @@ export default function CsvTableFromUrlWidget({ src }: { src: string }) {
   };
 
   const onEditClick = () => {
-    // TODO: 원하시는 편집 UX(모달/인라인 편집/다른 페이지 이동)에 연결
     alert("편집 기능은 아직 연결되지 않았습니다.");
   };
 
-  if (err) return <div style={{ padding: 12, color: "#b91c1c" }}>{err}</div>;
+  if (err)
+    return <div className="p-3 text-destructive text-sm">{err}</div>;
   if (!csvText)
-    return (
-      <div style={{ padding: 12, color: "#6b7280" }}>CSV 불러오는 중…</div>
-    );
+    return <div className="p-3 text-muted-foreground">CSV 불러오는 중…</div>;
   if (parsed.parseErr)
     return (
-      <div style={{ padding: 12, color: "#b91c1c" }}>
+      <div className="p-3 text-destructive text-sm">
         CSV 파싱 오류: {parsed.parseErr}
       </div>
     );
 
   return (
-    <div style={{ padding: 12 }}>
-      {/* 상단 바: 좌측 버튼 + 우측 rows/cols */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            onClick={downloadCsv}
-            title="CSV 다운로드"
-            style={{
-              fontSize: 12,
-              padding: "6px 10px",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              background: "white",
-              cursor: "pointer",
-            }}
-          >
-            ⬇ 다운로드
-          </button>
-          <button
-            type="button"
-            onClick={onEditClick}
-            title="sql편집"
-            style={{
-              fontSize: 12,
-              padding: "6px 10px",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              background: "white",
-              cursor: "pointer",
-            }}
-          >
-            ✏️ SQL 편집
-          </button>
+    <div className="p-3">
+      {/* 상단 바 */}
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={downloadCsv} title="CSV 다운로드">
+            <Download size={14} />
+            다운로드
+          </Button>
+          <Button variant="outline" size="sm" onClick={onEditClick} title="SQL 편집">
+            <Pencil size={14} />
+            SQL 편집
+          </Button>
         </div>
 
-        <div style={{ fontSize: 12, color: "#6b7280" }}>
+        <Badge variant="secondary" className="text-xs font-normal">
           rows: {parsed.rows.length} · cols: {parsed.columns.length}
-        </div>
+        </Badge>
       </div>
 
-      {/* 테이블+하단 고정 가로 스크롤을 묶는 래퍼 */}
-      <div
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 10,
-          overflow: "hidden", 
-        }}
-      >
-        {/* 실제 테이블 스크롤 영역 (세로/가로) */}
+      {/* 테이블 */}
+      <div className="rounded-lg border overflow-hidden">
         <div
           ref={tableScrollRef}
           onScroll={onTableScroll}
-          style={{
-            overflow: "auto",
-            maxHeight: 520, 
-          }}
+          className="overflow-auto max-h-[520px]"
         >
-          <table
-            ref={measureRef}
-            style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}
-          >
-            <thead
-              style={{
-                position: "sticky",
-                top: 0,
-                background: "white",
-                zIndex: 1,
-              }}
-            >
+          <table ref={measureRef} className="w-full text-[13px] border-collapse">
+            <thead className="sticky top-0 bg-card z-[1]">
               <tr>
                 {parsed.columns.map((c) => (
-                  <th
-                    key={c}
-                    style={{
-                      textAlign: "left",
-                      padding: 10,
-                      borderBottom: "1px solid #e5e7eb",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <TableHead key={c} className="whitespace-nowrap">
                     {c}
-                  </th>
+                  </TableHead>
                 ))}
               </tr>
             </thead>
             <tbody>
               {parsed.rows.slice(0, 30).map((r, i) => (
-                <tr key={i}>
+                <TableRow key={i}>
                   {parsed.columns.map((c) => (
-                    <td
-                      key={c}
-                      style={{
-                        padding: 10,
-                        borderBottom: "1px solid #f3f4f6",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <TableCell key={c} className="whitespace-nowrap">
                       {String(r?.[c] ?? "")}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* 하단에 "항상 보이는" 가로 스크롤바 (sticky) */}
+        {/* 하단 가로 스크롤 */}
         <div
           ref={hScrollRef}
           onScroll={onHScroll}
-          style={{
-            position: "sticky",
-            bottom: 0,
-            overflowX: "auto",
-            overflowY: "hidden",
-            background: "white",
-            borderTop: "1px solid #f3f4f6",
-          }}
+          className="sticky bottom-0 overflow-x-auto overflow-y-hidden bg-card border-t"
         >
-          {/* 이 div가 실제 스크롤 너비를 만든다 */}
           <div style={{ width: scrollWidth, height: 14 }} />
         </div>
       </div>
 
       {parsed.rows.length > 30 && (
-        <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+        <p className="mt-2 text-xs text-muted-foreground">
           성능을 위해 30행까지만 표시 중
-        </div>
+        </p>
       )}
     </div>
   );

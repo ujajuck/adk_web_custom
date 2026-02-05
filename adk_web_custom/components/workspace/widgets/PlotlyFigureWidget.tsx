@@ -9,12 +9,15 @@ export default function PlotlyFigureWidget({
   fig: { data: any[]; layout?: any; config?: any };
 }) {
   return (
-    <div style={{ padding: 8, height: "100%" }}>
+    <div className="p-2 h-full">
       <Plot
         data={fig.data}
         layout={{
           margin: { l: 40, r: 20, t: 30, b: 40 },
           autosize: true,
+          paper_bgcolor: "transparent",
+          plot_bgcolor: "transparent",
+          font: { family: "inherit" },
           ...fig.layout,
         }}
         config={{
