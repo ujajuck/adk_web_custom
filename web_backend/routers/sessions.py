@@ -21,11 +21,14 @@ log = logging.getLogger(__name__)
 @router.post("", response_model=SessionInfo)
 async def create_session(req: SessionCreateRequest):
     """Create a new session – registers both on ADK and in the local DB."""
+    log.info("Creating session: user_id=%s, session_id=%s", req.user_id, req.session_id)
+
     # 1. Create on ADK side
     try:
-        await create_adk_session(req.user_id, req.session_id, req.state)
+        result = await create_adk_session(req.user_id, req.session_id, req.state)
+        log.info("ADK session created: %s", result)
     except Exception as exc:
-        log.warning("ADK session creation failed: %s", exc)
+        log.warning("ADK session creation failed: %s", exc, exc_info=True)
         raise HTTPException(502, detail=f"ADK session creation failed: {exc}")
 
     # 2. Persist locally

@@ -47,13 +47,15 @@ def _resolve_artifact_path(
 @router.post("", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Send a user message to ADK, parse the response, and persist."""
+    log.info("Chat request: user=%s session=%s msg=%s", req.user_id, req.session_id, req.message[:100])
     job_id = f"job_{uuid.uuid4().hex[:12]}"
 
     # 1. Forward to ADK
     try:
         events = await send_message_to_adk(req.user_id, req.session_id, req.message)
+        log.debug("ADK returned %d events", len(events))
     except Exception as exc:
-        log.error("ADK request failed: %s", exc)
+        log.error("ADK request failed: %s", exc, exc_info=True)
         raise HTTPException(502, detail=f"ADK request failed: {exc}")
 
     # 2. Parse response

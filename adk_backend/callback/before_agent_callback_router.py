@@ -5,7 +5,7 @@ import logging
 from typing import Callable, Dict, Optional
 
 from google.genai import types
-from google.adk.context import CallbackContext  # 문서: CallbackContext는 agent_name, user_content 등 포함 :contentReference[oaicite:3]{index=3}
+from google.adk.agents.callback_context import CallbackContext
 
 AgentPolicy = Callable[[CallbackContext], Optional[types.Content]]
 
