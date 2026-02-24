@@ -8,9 +8,6 @@ import {
 } from "react";
 import { Send, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import type { Msg } from "@/components/chat/adkTypes";
 
@@ -37,7 +34,7 @@ export default function ChatPanel() {
 
   const [isSending, setIsSending] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const creatingRef = useRef(false); // 중복 생성 방지
+  const creatingRef = useRef(false);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -58,17 +55,28 @@ export default function ChatPanel() {
     pushMsg("assistant", "세션 생성 중…");
 
     try {
+      const reqBody = {
+        user_id: id,
+        session_id: id,
+        session_name: "",
+      };
+      console.log("[ChatPanel] Creating session:", API_URL, reqBody);
+
       const res = await fetch(`${API_URL}/api/sessions`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          user_id: id,
-          session_id: id,
-          session_name: "",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
       });
 
-      const json = await res.json().catch(() => null);
+      const text = await res.text();
+      console.log("[ChatPanel] Session response:", res.status, text);
+
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`Invalid JSON: ${text.slice(0, 200)}`);
+      }
 
       if (!res.ok || !json?.session_id) {
         throw new Error(json?.detail ?? `HTTP ${res.status}`);
@@ -79,6 +87,7 @@ export default function ChatPanel() {
       setSessionStatus("ready");
       pushMsg("assistant", `세션 준비됨 · ${id}`);
     } catch (e: any) {
+      console.error("[ChatPanel] Session error:", e);
       setSessionStatus("error");
       pushMsg("assistant", `세션 생성 실패: ${String(e?.message ?? e)}`);
     } finally {
@@ -86,7 +95,6 @@ export default function ChatPanel() {
     }
   }, []);
 
-  // 최초 마운트 시 1회만 세션 생성
   useEffect(() => {
     createSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,22 +115,34 @@ export default function ChatPanel() {
       setInput("");
 
       try {
+        const reqBody = {
+          user_id: userId,
+          session_id: sessionId,
+          message: t,
+        };
+        console.log("[ChatPanel] Sending chat:", API_URL, reqBody);
+
         const res = await fetch(`${API_URL}/api/chat`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            user_id: userId,
-            session_id: sessionId,
-            message: t,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody),
         });
 
-        const json = await res.json().catch(() => null);
+        const responseText = await res.text();
+        console.log("[ChatPanel] Chat response:", res.status, responseText.slice(0, 500));
+
+        let json: any = null;
+        try {
+          json = JSON.parse(responseText);
+        } catch {
+          pushMsg("assistant", `응답 파싱 실패: ${responseText.slice(0, 200)}`);
+          return;
+        }
 
         if (!res.ok) {
           pushMsg(
             "assistant",
-            `요청 실패 (${res.status}): ${json?.detail ?? "unknown"}`,
+            `요청 실패 (${res.status}): ${JSON.stringify(json?.detail ?? json)}`,
           );
           return;
         }
@@ -145,7 +165,7 @@ export default function ChatPanel() {
           pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${pf.title}`);
         }
 
-        // Assistant text (항상 마지막에 표시)
+        // Assistant text
         if (json?.text) {
           pushMsg("assistant", json.text);
         } else if (!json?.csv_files?.length && !json?.plotly_figs?.length) {
@@ -155,6 +175,7 @@ export default function ChatPanel() {
           );
         }
       } catch (e: any) {
+        console.error("[ChatPanel] Chat error:", e);
         pushMsg("assistant", `요청 오류: ${String(e?.message ?? e)}`);
       } finally {
         setIsSending(false);
@@ -167,7 +188,6 @@ export default function ChatPanel() {
     void sendTextToAdk(input);
   }
 
-  // WorkspacePanel → ChatPanel 이벤트 수신
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<WorkspaceSendDetail>;
@@ -191,54 +211,52 @@ export default function ChatPanel() {
   const canSend = sessionStatus === "ready" && !isSending;
 
   return (
-    <div className="h-full grid grid-rows-[auto_1fr_auto]">
+    <div className="h-full flex flex-col bg-white">
       {/* ── 상단: 세션 상태 ── */}
-      <div className="px-3 py-2 border-b bg-muted/50 flex items-center gap-2 min-h-[40px]">
+      <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-2 min-h-[44px]">
         {sessionStatus === "ready" && (
           <>
-            <span className="text-xs text-muted-foreground">session:</span>
-            <Badge variant="outline" className="font-mono text-[10px] truncate max-w-[160px]">
+            <span className="text-xs text-gray-500">session:</span>
+            <span className="font-mono text-[10px] text-gray-600 bg-white border border-gray-200 rounded px-1.5 py-0.5 truncate max-w-[160px]">
               {sessionId}
-            </Badge>
+            </span>
           </>
         )}
         {sessionStatus === "creating" && (
-          <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <Loader2 size={11} className="animate-spin" />
+          <span className="text-xs text-gray-500 flex items-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" />
             세션 연결 중…
           </span>
         )}
         {sessionStatus === "error" && (
-          <span className="text-xs text-destructive flex items-center gap-1.5">
-            <AlertCircle size={11} />
+          <span className="text-xs text-red-600 flex items-center gap-1.5">
+            <AlertCircle size={12} />
             세션 오류
           </span>
         )}
         <div className="flex-1" />
         {sessionStatus === "error" && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs gap-1"
+          <button
+            className="h-7 px-2.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md flex items-center gap-1 transition-colors"
             onClick={() => {
               setSessionStatus("idle");
               createSession();
             }}
           >
-            <RefreshCw size={11} />
+            <RefreshCw size={12} />
             재연결
-          </Button>
+          </button>
         )}
         {isSending && (
-          <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <Loader2 size={11} className="animate-spin" />
+          <span className="text-xs text-blue-600 flex items-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" />
             전송 중…
           </span>
         )}
       </div>
 
       {/* ── 메시지 목록 ── */}
-      <div ref={scrollerRef} className="overflow-auto p-3 space-y-2.5">
+      <div ref={scrollerRef} className="flex-1 overflow-auto p-4 space-y-3 bg-gray-50">
         {messages.map((m, i) => {
           const isUser = m.role === "user";
           return (
@@ -248,10 +266,10 @@ export default function ChatPanel() {
             >
               <div
                 className={cn(
-                  "max-w-[78%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap shadow-sm",
+                  "max-w-[80%] px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
                   isUser
-                    ? "bg-blue-600 text-white rounded-2xl rounded-tr-sm"
-                    : "bg-muted text-foreground rounded-2xl rounded-tl-sm",
+                    ? "bg-blue-500 text-white rounded-2xl rounded-br-md shadow-md"
+                    : "bg-white text-gray-800 rounded-2xl rounded-bl-md shadow-sm border border-gray-200",
                 )}
               >
                 {m.text}
@@ -262,8 +280,8 @@ export default function ChatPanel() {
       </div>
 
       {/* ── 입력창 ── */}
-      <div className="p-3 border-t bg-muted/50 flex items-center gap-2">
-        <Input
+      <div className="p-3 border-t border-gray-200 bg-white flex items-center gap-2">
+        <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
@@ -275,20 +293,29 @@ export default function ChatPanel() {
               : "세션 오류 – 재연결 후 입력하세요"
           }
           disabled={!canSend}
-          className="flex-1 h-10 rounded-xl bg-background"
+          className={cn(
+            "flex-1 h-11 px-4 rounded-full border text-sm transition-all",
+            "bg-gray-50 border-gray-300 placeholder:text-gray-400",
+            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white",
+            "disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+          )}
         />
-        <Button
+        <button
           onClick={send}
           disabled={!canSend || !input.trim()}
-          size="icon"
-          className="h-10 w-10 rounded-xl bg-blue-600 hover:bg-blue-700 shrink-0"
+          className={cn(
+            "h-11 w-11 rounded-full flex items-center justify-center transition-all shrink-0",
+            "bg-blue-500 text-white shadow-md hover:bg-blue-600 hover:shadow-lg",
+            "active:scale-95",
+            "disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none disabled:cursor-not-allowed"
+          )}
         >
           {isSending ? (
-            <Loader2 size={16} className="animate-spin" />
+            <Loader2 size={18} className="animate-spin" />
           ) : (
-            <Send size={16} />
+            <Send size={18} />
           )}
-        </Button>
+        </button>
       </div>
     </div>
   );
