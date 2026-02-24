@@ -1,16 +1,17 @@
 import os
 from pathlib import Path
 
-# .env 파일 로드 (python-dotenv가 설치된 경우)
-try:
-    from dotenv import load_dotenv
-    _env_path = Path(__file__).resolve().parent / ".env"
-    if _env_path.exists():
-        load_dotenv(_env_path)
-except ImportError:
-    pass
-
 _BASE = Path(__file__).resolve().parent
+_ENV_PATH = _BASE / ".env"
+
+# .env 파일에서 설정 로드 (기존 환경변수 덮어쓰기)
+from dotenv import load_dotenv
+
+if _ENV_PATH.exists():
+    load_dotenv(_ENV_PATH, override=True)
+    print(f"[config] Loaded .env from {_ENV_PATH}")
+else:
+    print(f"[config] .env not found at {_ENV_PATH}")
 
 
 class Settings:
@@ -28,4 +29,9 @@ class Settings:
 
 
 settings = Settings()
+
+# 디버그 출력
+print(f"[config] WORKSPACE_FILES_DIR = {settings.WORKSPACE_FILES_DIR}")
+print(f"[config] ADK_BASE_URL = {settings.ADK_BASE_URL}")
+
 Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
