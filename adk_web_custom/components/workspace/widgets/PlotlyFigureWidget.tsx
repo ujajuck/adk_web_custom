@@ -1,7 +1,10 @@
 "use client";
 
 import React from "react";
-import Plot from "react-plotly.js";
+import dynamic from "next/dynamic";
+
+// SSR 비활성화 - Plotly.js는 브라우저에서만 동작
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 export default function PlotlyFigureWidget({
   fig,
