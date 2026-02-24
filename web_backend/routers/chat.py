@@ -19,7 +19,9 @@ from ..services.response_parser import (
     extract_artifact_delta,
     extract_assistant_text,
     extract_plotly_fig,
+    extract_plotly_urls,
 )
+from ..services.plotly_fetcher import fetch_plotly_from_url
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -88,7 +90,7 @@ async def chat(req: ChatRequest):
         else:
             log.warning("Artifact path does not exist: %s", artifact_path)
 
-    # 4. Process plotly figure
+    # 4. Process plotly figure (embedded in events)
     plotly_metas: list[PlotlyFigMeta] = []
     if plotly_result:
         fig_id = f"{req.session_id}__fig__{uuid.uuid4().hex[:8]}"
@@ -100,6 +102,25 @@ async def chat(req: ChatRequest):
                 fig=plotly_result["fig"],
             )
         )
+
+    # 4b. Process plotly URLs (MCP resource links in assistant text)
+    plotly_urls = extract_plotly_urls(assistant_text)
+    for url in plotly_urls:
+        try:
+            fetched = await fetch_plotly_from_url(url)
+            if fetched:
+                fig_id = f"{req.session_id}__fig__{uuid.uuid4().hex[:8]}"
+                plotly_store.store(fig_id, fetched["title"], fetched["fig"])
+                plotly_metas.append(
+                    PlotlyFigMeta(
+                        fig_id=fig_id,
+                        title=fetched["title"],
+                        fig=fetched["fig"],
+                    )
+                )
+                log.info("Added Plotly figure from URL: %s", url)
+        except Exception as exc:
+            log.warning("Failed to fetch Plotly from URL %s: %s", url, exc)
 
     # 5. Persist to SQLite
     db = await get_db()

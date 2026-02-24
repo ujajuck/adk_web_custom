@@ -4,6 +4,7 @@ components/chat/ (extractArtifactDelta, plotlyParsers, adkParsers)."""
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 
@@ -124,3 +125,24 @@ def extract_assistant_text(events: Any) -> str:
                 continue
             texts.append(t)
     return "\n".join(texts).strip()
+
+
+# ── plotly URL extraction ─────────────────────────────────────
+
+# MCP resource URL 패턴: mcp://resource/xxx.json 또는 http(s)://...mcp://resource/xxx.json
+_PLOTLY_URL_PATTERN = re.compile(
+    r'https?://[^\s\)]+mcp://resource/[a-f0-9]+\.json|mcp://resource/[a-f0-9]+\.json',
+    re.IGNORECASE
+)
+
+
+def extract_plotly_urls(text: str) -> list[str]:
+    """Extract Plotly JSON URLs from assistant text.
+
+    Matches patterns like:
+    - https://adk-resource-host.com/mcp://resource/abc123.json
+    - mcp://resource/abc123.json
+    """
+    if not text:
+        return []
+    return _PLOTLY_URL_PATTERN.findall(text)
