@@ -1,6 +1,15 @@
 import os
 from pathlib import Path
 
+# .env 파일 로드 (python-dotenv가 설치된 경우)
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path)
+except ImportError:
+    pass
+
 _BASE = Path(__file__).resolve().parent
 
 
