@@ -1,108 +1,103 @@
-"""Fetch Plotly figure JSON from MCP resource URLs."""
+"""Fetch Plotly figure JSON from MCP resource files.
+
+mcp://resource/{job_id}.json URI에서 job_id를 추출해
+MCP_RESOURCE_ROOT/{job_id}.json 파일을 직접 읽는다.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
-import httpx
+from ..config import settings
 
 log = logging.getLogger(__name__)
 
-# MCP 서버 기본 URL
-MCP_BASE_URL = "http://127.0.0.1:8001"
-
-# Resource ID 추출 패턴 (mcp://resource/xxx.json에서 xxx 추출)
-_RESOURCE_ID_PATTERN = re.compile(r'mcp://resource/([a-f0-9]+)\.json', re.IGNORECASE)
+# mcp://resource/{filename} 에서 파일명 추출
+_FILENAME_PATTERN = re.compile(r'mcp://resource/([^)\s"\']+)', re.IGNORECASE)
 
 
 async def fetch_plotly_from_url(url: str) -> dict[str, Any] | None:
-    """MCP resource URL에서 Plotly JSON을 가져온다.
+    """mcp://resource/xxx.json URI에서 Plotly figure를 파일로 직접 읽어 반환.
 
-    URL 형식:
-    - https://adk-resource-host.com/mcp://resource/abc123.json
-    - mcp://resource/abc123.json
-
-    Returns: {"title": str, "fig": {...}} or None
+    Returns: {"title": str, "fig": {data, layout, config}} or None
     """
-    # resource ID 추출
-    match = _RESOURCE_ID_PATTERN.search(url)
+    match = _FILENAME_PATTERN.search(url)
     if not match:
-        log.warning("Could not extract resource ID from URL: %s", url)
+        log.warning("mcp://resource/ 패턴을 찾을 수 없음: %s", url)
         return None
 
-    resource_id = match.group(1)
-    log.info("Fetching Plotly resource: %s", resource_id)
+    filename = match.group(1)  # e.g. "bf6ffd572a30416f8b86b2d43edf340f.json"
 
-    # MCP 서버에서 리소스 가져오기 시도
-    # 방법 1: 직접 HTTP GET (fastmcp가 리소스를 HTTP로 노출하는 경우)
+    root = settings.MCP_RESOURCE_ROOT
+    if not root:
+        log.warning("MCP_RESOURCE_ROOT가 설정되지 않았습니다. web_backend/.env를 확인하세요.")
+        return None
+
+    file_path = Path(root) / filename
+    log.info("Reading MCP resource: %s", file_path)
+
+    if not file_path.exists():
+        log.warning("MCP resource 파일이 없습니다: %s", file_path)
+        return None
+
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # MCP HTTP 리소스 엔드포인트 시도
-            for endpoint in [
-                f"{MCP_BASE_URL}/resources/{resource_id}.json",
-                f"{MCP_BASE_URL}/mcp/resources/{resource_id}.json",
-                f"{MCP_BASE_URL}/resource/{resource_id}.json",
-            ]:
-                try:
-                    resp = await client.get(endpoint)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        log.info("Fetched Plotly JSON from %s", endpoint)
-                        return _parse_plotly_json(data, resource_id)
-                except Exception as e:
-                    log.debug("Failed to fetch from %s: %s", endpoint, e)
-                    continue
-
-            # 원본 URL 직접 시도 (http/https인 경우)
-            if url.startswith("http"):
-                # URL에서 mcp:// 부분 제거하고 정규화
-                clean_url = url
-                resp = await client.get(clean_url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return _parse_plotly_json(data, resource_id)
-
+        data = json.loads(file_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        log.warning("Failed to fetch Plotly from URL %s: %s", url, exc)
+        log.warning("MCP resource JSON 읽기 실패: %s – %s", file_path, exc)
+        return None
 
-    return None
+    return _parse_plotly_json(data, filename)
 
 
-def _parse_plotly_json(data: Any, resource_id: str) -> dict[str, Any] | None:
-    """Plotly JSON 데이터를 파싱하여 표준 형식으로 반환."""
+def _parse_plotly_json(data: Any, filename: str) -> dict[str, Any] | None:
+    """저장된 JSON을 Plotly figure 형식으로 파싱."""
     if not isinstance(data, dict):
         return None
 
-    # Plotly figure 형식 확인
-    if "data" in data and isinstance(data["data"], list):
-        # 직접 Plotly figure 형식
-        layout = data.get("layout", {})
-        title = ""
-        lt = layout.get("title")
-        if isinstance(lt, str):
-            title = lt
-        elif isinstance(lt, dict):
-            title = lt.get("text", "")
+    # bar_plot 저장 형식: {"type":"plotly","title":"...","fig":{...},"meta":{...}}
+    if data.get("type") == "plotly" and "fig" in data:
+        fig = data["fig"]
+        if not isinstance(fig, dict) or not isinstance(fig.get("data"), list):
+            return None
+
+        layout = fig.get("layout") or {}
+        title = data.get("title") or _title_from_layout(layout) or filename
 
         return {
-            "title": title or f"Chart {resource_id[:8]}",
+            "title": title,
+            "fig": {
+                "data": fig["data"],
+                "layout": layout,
+                "config": fig.get("config") or {},
+                "frames": fig.get("frames") if isinstance(fig.get("frames"), list) else None,
+            },
+        }
+
+    # 직접 Plotly figure 형식: {"data":[...],"layout":{...}}
+    if "data" in data and isinstance(data["data"], list):
+        layout = data.get("layout") or {}
+        title = _title_from_layout(layout) or filename
+        return {
+            "title": title,
             "fig": {
                 "data": data["data"],
                 "layout": layout,
-                "config": data.get("config", {}),
+                "config": data.get("config") or {},
                 "frames": data.get("frames") if isinstance(data.get("frames"), list) else None,
-            }
+            },
         }
 
-    # 다른 형식 (graph 키에 JSON 문자열이 있는 경우)
-    if "graph" in data and isinstance(data["graph"], str):
-        try:
-            fig_obj = json.loads(data["graph"])
-            return _parse_plotly_json(fig_obj, resource_id)
-        except json.JSONDecodeError:
-            pass
-
     return None
+
+
+def _title_from_layout(layout: dict) -> str:
+    lt = layout.get("title")
+    if isinstance(lt, str):
+        return lt
+    if isinstance(lt, dict):
+        return lt.get("text", "")
+    return ""

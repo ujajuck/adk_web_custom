@@ -20,6 +20,7 @@ class Settings:
     ADK_ARTIFACT_ROOT: str = os.getenv(
         "ADK_ARTIFACT_ROOT", str(_BASE / ".adk" / "artifacts")
     )
+    MCP_RESOURCE_ROOT: str = os.getenv("MCP_RESOURCE_ROOT", "")
     WORKSPACE_FILES_DIR: str = os.getenv("WORKSPACE_FILES_DIR", str(_BASE / "data"))
     DATA_DIR: str = os.getenv("WEB_BACKEND_DATA_DIR", str(_BASE / "csv_store"))
     DB_PATH: str = os.getenv("WEB_BACKEND_DB_PATH", str(_BASE / "web_backend.db"))
