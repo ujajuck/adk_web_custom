@@ -16,7 +16,8 @@ export type WorkspaceWidget =
       type: "plotly";
       title: string;
       fig: { data: any[]; layout?: any; config?: any };
-    };
+    }
+  | { id: string; type: "flowGraph"; title: string; sessionId: string };
 
 export type WorkspaceWindow = {
   id: string;
@@ -37,6 +38,7 @@ type Ctx = {
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
   ) => void;
+  addFlowGraphWindow: (title: string, sessionId: string) => void;
   updateWindow: (
     id: string,
     patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>,
@@ -138,6 +140,26 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ]);
   }
 
+  function addFlowGraphWindow(title: string, sessionId: string) {
+    const id = nextId("win");
+    const widgetId = nextId("flow");
+    const z = zTop + 1;
+    setZTop(z);
+
+    setWindows((prev) => [
+      ...prev,
+      {
+        id,
+        widget: { id: widgetId, type: "flowGraph", title, sessionId },
+        x: 60 + prev.length * 16,
+        y: 60 + prev.length * 16,
+        w: 800,
+        h: 500,
+        z,
+      },
+    ]);
+  }
+
   function updateWindow(
     id: string,
     patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>,
@@ -165,6 +187,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       addCsvTableWindow,
       addCsvFileWindow,
       addPlotlyWindow,
+      addFlowGraphWindow,
       updateWindow,
       bringToFront,
       closeWindow,

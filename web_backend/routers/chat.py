@@ -22,6 +22,8 @@ from ..services.response_parser import (
     extract_plotly_urls,
 )
 from ..services.plotly_fetcher import fetch_plotly_from_url
+from ..services.flow_parser import parse_artifact_flow
+from ..services.flow_store import flow_store
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -122,7 +124,21 @@ async def chat(req: ChatRequest):
         except Exception as exc:
             log.warning("Failed to fetch Plotly from URL %s: %s", url, exc)
 
-    # 5. Persist to SQLite
+    # 5. Parse and store artifact flow
+    try:
+        existing_flow = flow_store.get(req.session_id)
+        updated_flow = parse_artifact_flow(
+            session_id=req.session_id,
+            events=events,
+            artifact_delta=artifact_delta,
+            existing_flow=existing_flow,
+        )
+        flow_store.update(req.session_id, updated_flow)
+        log.debug("Flow updated: %d nodes, %d edges", len(updated_flow.nodes), len(updated_flow.edges))
+    except Exception as exc:
+        log.warning("Failed to parse artifact flow: %s", exc)
+
+    # 6. Persist to SQLite
     db = await get_db()
     try:
         await db.execute(

@@ -9,6 +9,7 @@ import { useWorkspace } from "./WorkspaceContext";
 import CsvTableFromUrlWidget from "@/components/workspace/widgets/CsvTableFromUrlWidget";
 import CsvFileWidget from "@/components/workspace/widgets/CsvFileWidget";
 import PlotlyFigureWidget from "@/components/workspace/widgets/PlotlyFigureWidget";
+import FlowGraphWidget from "@/components/workspace/widgets/FlowGraphWidget";
 import WorkspaceTopBar from "@/components/workspace/WorkspaceTopBar";
 import ServerFilePicker, {
   type ServerFileItem,
@@ -65,6 +66,8 @@ export default function WorkspacePanel() {
         return <CsvFileWidget fileId={w.fileId} />;
       case "plotly":
         return <PlotlyFigureWidget fig={w.fig} />;
+      case "flowGraph":
+        return <FlowGraphWidget sessionId={w.sessionId} />;
       default:
         return (
           <div className="p-3 text-muted-foreground">unknown widget</div>

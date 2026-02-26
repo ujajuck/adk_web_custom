@@ -23,7 +23,7 @@ type WorkspaceSendDetail = {
 };
 
 export default function ChatPanel() {
-  const { addPlotlyWindow, addCsvFileWindow } = useWorkspace();
+  const { addPlotlyWindow, addCsvFileWindow, addFlowGraphWindow } = useWorkspace();
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -207,6 +207,20 @@ export default function ChatPanel() {
     window.addEventListener("adk:chat:send", handler);
     return () => window.removeEventListener("adk:chat:send", handler);
   }, [sendTextToAdk]);
+
+  // Listen for flow graph request
+  useEffect(() => {
+    const handler = () => {
+      if (sessionId) {
+        addFlowGraphWindow("Artifact Flow", sessionId);
+      } else {
+        pushMsg("assistant", "세션이 아직 준비되지 않았습니다.");
+      }
+    };
+
+    window.addEventListener("workspace:flow", handler);
+    return () => window.removeEventListener("workspace:flow", handler);
+  }, [sessionId, addFlowGraphWindow]);
 
   const canSend = sessionStatus === "ready" && !isSending;
 
