@@ -17,13 +17,36 @@ def fill_missing(args: Dict[str, Any]) -> Dict[str, Any]:
     - 대체: 평균, 중앙값, 최빈값, 특정 값으로 대체
     - 보간: 선형 보간, 앞/뒤 값으로 채우기
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"a":1,"b":null},{"a":2,"b":3}],"columns":["b"],"method":"mean"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"sales","file_name":"sales.csv"},"columns":["price","quantity"],"method":"median"}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "sales_data",
+           "columns": ["price", "quantity"],
+           "method": "median"
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/sales.csv",
+           "columns": ["price", "quantity"],
+           "method": "mean"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"a":1,"b":null}, {"a":2,"b":3}],
+           "columns": ["b"],
+           "method": "mean"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    처리 파라미터:
       - columns (list[str], optional): 처리할 컬럼들. 없으면 전체 컬럼 대상
       - method (str, default="mean"): 결측치 처리 방법
         - "drop_rows": 결측치가 있는 행 삭제

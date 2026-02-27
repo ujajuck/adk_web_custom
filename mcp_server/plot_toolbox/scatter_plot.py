@@ -15,13 +15,37 @@ def scatter_plot(args: Dict[str, Any]) -> Dict[str, Any]:
     두 수치형 변수 간의 관계를 시각화한다.
     상관계수와 추세를 자동으로 분석하여 메타데이터에 포함한다.
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"x":1,"y":2},{"x":2,"y":4}],"x":"x","y":"y"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"sales","file_name":"sales.csv"},"x":"price","y":"quantity"}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "sales_data",
+           "columns": ["price", "quantity"],
+           "x": "price",
+           "y": "quantity"
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/sales.csv",
+           "x": "price",
+           "y": "quantity"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"x":1,"y":2}, {"x":2,"y":4}],
+           "x": "x",
+           "y": "y"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    그래프 파라미터:
       - x (str, required): x축 컬럼명 (수치형)
       - y (str, required): y축 컬럼명 (수치형)
       - color (str, optional): 점 색상을 구분할 범주형 컬럼

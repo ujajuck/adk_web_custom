@@ -12,13 +12,37 @@ from ..utils.plot_io import safe_run_tool
 def bar_plot(args: Dict[str, Any]) -> Dict[str, Any]:
     """막대그래프(Plotly)를 생성해 JSON으로 저장하고 resource_link로 반환한다.
 
-    입력(공통):
-      - direct:
-        {"kind":"direct","data":[{"a":"A","v":3},{"a":"B","v":7}],"x":"a","y":"v","agg":"sum"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"xxx","file_name":"yyy.csv"},"x":"colA","y":"colB"}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "sales_data",
+           "columns": ["category", "revenue"],
+           "x": "category",
+           "y": "revenue"
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/sales.csv",
+           "x": "category",
+           "y": "revenue"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"a":"A","v":3}, {"a":"B","v":7}],
+           "x": "a",
+           "y": "v"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    그래프 파라미터:
       - x (str, optional): x축(범주) 컬럼명. 없으면 columns[0] 또는 첫 컬럼
       - y (str, optional): y축(수치) 컬럼명. 없으면 count 모드(빈도)
       - agg (str, default="sum"): y가 있을 때 집계: sum|mean|count|median|max|min
@@ -32,7 +56,7 @@ def bar_plot(args: Dict[str, Any]) -> Dict[str, Any]:
         "type":"plotly",
         "title":"...",
         "fig": <plotly figure dict>,
-        "meta": {...}  
+        "meta": {...}
       }
     """
 

@@ -1,11 +1,17 @@
 """
 plot_toolbox 공통 IO + Wrapper.
 
-- raw_args(dict) -> ToolInput(Direct|Locator) 검증
+- raw_args(dict) -> DataSource(Direct|Artifact|File) 검증
 - -> DataFrame 로딩(또는 변환)
 - -> core_fn 실행(기존 plot 로직을 최대한 유지)
 - -> 결과를 MCP resource store에 저장 (json/png/html/csv 등)
 - -> 표준 ToolResponse 반환 (outputs 리스트)
+
+지원 입력 형태:
+- source_type="direct": 데이터 직접 전달
+- source_type="artifact": ADK 아티팩트에서 로드 (artifact_name + columns)
+- source_type="file": 로컬 파일에서 로드 (path + columns)
+- 하위 호환: kind="direct"|"locator" 형식도 지원
 """
 
 from __future__ import annotations
@@ -18,12 +24,12 @@ from typing import Any, Dict, Optional, Tuple, Callable
 import pandas as pd
 
 from ..utils.model import (
-    DirectDataInput,
-    LocatorDataInput,
     build_error_response,
-    build_success_response,
 )
-from ..utils.path_resolver import resolve_artifact_path, save_resource, save_resource_bytes
+from ..utils.path_resolver import save_resource, save_resource_bytes
+from ..utils.data_source import (
+    resolve_dataframe_from_args,
+)
 
 
 _SAFE_CHARS = re.compile(r"[^a-zA-Z0-9_\-\.]+")
@@ -42,47 +48,26 @@ def make_safe_title(title: str, fallback: str = "result") -> str:
     return t[:120]
 
 
-def _read_csv_or_json(path: str) -> pd.DataFrame:
-    """확장자 기반 CSV/JSON 로딩."""
-    lower = path.lower()
-    if lower.endswith(".csv"):
-        return pd.read_csv(path)
-    if lower.endswith(".json"):
-        with open(path, "r", encoding="utf-8") as f:
-            obj = json.load(f)
-        return pd.DataFrame(obj)
-    raise ValueError(f"지원하지 않는 파일 형식입니다: {path}")
-
-
-def resolve_input_to_dataframe(raw_args: Dict[str, Any]) -> Tuple[pd.DataFrame, Optional[list]]:
+def resolve_input_to_dataframe(
+    raw_args: Dict[str, Any],
+    context: Optional[Any] = None,
+) -> Tuple[pd.DataFrame, Optional[list]]:
     """raw_args를 해석하여 DataFrame으로 통일.
+
+    지원 입력 형태:
+    - source_type="direct": 데이터 직접 전달
+    - source_type="artifact": ADK 아티팩트에서 로드 (artifact_name + columns)
+    - source_type="file": 로컬 파일에서 로드 (path + columns)
+    - 하위 호환: kind="direct"|"locator" 형식도 지원
+
+    Args:
+        raw_args: 툴 입력 딕셔너리
+        context: 툴 컨텍스트 (아티팩트 로드 시 session_id 등 주입용)
 
     Returns:
         (df, columns): columns는 사용자가 지정한 컬럼 리스트(없으면 None)
     """
-    kind = (raw_args.get("kind") or "").strip()
-
-    if kind == "direct":
-        inp = DirectDataInput.model_validate(raw_args)
-        if isinstance(inp.data, pd.DataFrame):
-            df = inp.data
-        else:
-            df = pd.DataFrame(inp.data)
-        return df, inp.columns
-
-    if kind == "locator":
-        inp = LocatorDataInput.model_validate(raw_args)
-        loc = inp.artifact_locator.model_dump()
-        if not loc.get("session_id") or loc.get("version") is None:
-            raise ValueError(
-                "artifact_locator에 session_id/version이 없습니다. "
-                "before_tool_callback이 session_id/version을 주입하도록 확인하세요."
-            )
-        path = resolve_artifact_path(inp.artifact_locator.model_dump())
-        df = _read_csv_or_json(path)
-        return df, inp.columns
-
-    raise ValueError("kind는 'direct' 또는 'locator' 여야 합니다.")
+    return resolve_dataframe_from_args(raw_args, context)
 
 
 def _ensure_bytes_for_json(obj: Any) -> bytes:
@@ -181,8 +166,23 @@ def safe_run_tool(
     title: str,
     ext: str,
     description_builder: Callable[[pd.DataFrame, Any, Dict[str, Any]], str],
+    context: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """표준 Wrapper: 입력→DF→core 실행→리소스 저장→표준 응답.
+
+    지원 입력 형태:
+    - source_type="direct": 데이터 직접 전달
+    - source_type="artifact": ADK 아티팩트에서 로드 (artifact_name + columns)
+    - source_type="file": 로컬 파일에서 로드 (path + columns)
+    - 하위 호환: kind="direct"|"locator" 형식도 지원
+
+    Args:
+        raw_args: 툴 입력 딕셔너리
+        core_fn: 핵심 로직 함수 (df, columns, raw_args) -> (result_obj, meta)
+        title: 결과 파일 제목
+        ext: 결과 파일 확장자 ("json"|"csv")
+        description_builder: 설명 생성 함수 (df, result_obj, meta) -> str
+        context: 툴 컨텍스트 (아티팩트 로드 시 session_id 등 주입용)
 
     core_fn 반환:
       - (result_obj, meta)
@@ -192,7 +192,7 @@ def safe_run_tool(
     """
     try:
         job_id = make_job_id()
-        df, columns = resolve_input_to_dataframe(raw_args)
+        df, columns = resolve_input_to_dataframe(raw_args, context)
 
         result_obj, meta = core_fn(df, columns, raw_args)
         description = description_builder(df, result_obj, meta)

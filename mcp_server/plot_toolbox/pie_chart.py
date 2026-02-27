@@ -15,13 +15,37 @@ def pie_chart(args: Dict[str, Any]) -> Dict[str, Any]:
     범주별 비율/구성을 시각화하는 데 적합하다.
     상위 N개 항목만 표시하고 나머지는 "기타"로 묶을 수 있다.
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"category":"A","value":30},{"category":"B","value":70}],"labels":"category","values":"value"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"market_share","file_name":"market.csv"},"labels":"company","values":"share"}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "market_share",
+           "columns": ["company", "share"],
+           "labels": "company",
+           "values": "share"
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/market.csv",
+           "labels": "company",
+           "values": "share"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"category":"A","value":30}, {"category":"B","value":70}],
+           "labels": "category",
+           "values": "value"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    그래프 파라미터:
       - labels (str, required): 범주/라벨 컬럼명
       - values (str, optional): 값 컬럼명. 없으면 각 범주의 빈도(count)를 사용
       - agg (str, default="sum"): values 집계 방법 (sum|mean|count)

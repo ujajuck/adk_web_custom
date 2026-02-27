@@ -15,13 +15,38 @@ def line_plot(args: Dict[str, Any]) -> Dict[str, Any]:
     시계열 데이터나 연속적인 변화를 시각화하는 데 적합하다.
     여러 y 컬럼을 동시에 표시할 수 있다.
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"date":"2024-01","sales":100},{"date":"2024-02","sales":150}],"x":"date","y":"sales"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"monthly_data","file_name":"monthly.csv"},"x":"month","y":["revenue","cost"]}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "monthly_data",
+           "columns": ["month", "revenue", "cost"],  # 사용할 컬럼
+           "x": "month",
+           "y": ["revenue", "cost"]
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/sales.csv",
+           "columns": ["date", "sales"],
+           "x": "date",
+           "y": "sales"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"date":"2024-01","sales":100}, {"date":"2024-02","sales":150}],
+           "x": "date",
+           "y": "sales"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    그래프 파라미터:
       - x (str, required): x축 컬럼명 (날짜/시간 또는 순서형)
       - y (str|list[str], required): y축 컬럼명 (단일 또는 여러 컬럼)
       - group_by (str, optional): 그룹별로 선을 분리할 범주형 컬럼

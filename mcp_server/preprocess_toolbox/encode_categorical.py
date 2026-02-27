@@ -14,13 +14,36 @@ def encode_categorical(args: Dict[str, Any]) -> Dict[str, Any]:
     머신러닝 모델 입력에 적합한 형태로 범주형 변수를 변환한다.
     다양한 인코딩 방법을 지원한다.
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"color":"red"},{"color":"blue"},{"color":"red"}],"columns":["color"],"method":"onehot"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"customers","file_name":"customers.csv"},"columns":["gender","region"],"method":"label"}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "customers",
+           "columns": ["gender", "region"],
+           "method": "label"
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/customers.csv",
+           "columns": ["gender", "region"],
+           "method": "onehot"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"color":"red"}, {"color":"blue"}, {"color":"red"}],
+           "columns": ["color"],
+           "method": "onehot"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    처리 파라미터:
       - columns (list[str], optional): 인코딩할 컬럼들. 없으면 모든 object/category 컬럼
       - method (str, default="onehot"): 인코딩 방법
         - "onehot": 원-핫 인코딩 (각 범주를 별도 이진 컬럼으로)

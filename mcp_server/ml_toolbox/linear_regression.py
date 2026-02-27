@@ -16,13 +16,37 @@ def linear_regression(args: Dict[str, Any]) -> Dict[str, Any]:
     하나 이상의 독립변수(X)로 종속변수(y)를 예측하는 선형 모델을 학습한다.
     회귀 계수, 결정계수(R²), 잔차 분석 등 상세한 결과를 제공한다.
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"x1":1,"x2":2,"y":3},...],"features":["x1","x2"],"target":"y"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"housing","file_name":"housing.csv"},"features":["area","rooms"],"target":"price"}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "housing",
+           "columns": ["area", "rooms", "price"],
+           "features": ["area", "rooms"],
+           "target": "price"
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/housing.csv",
+           "features": ["area", "rooms"],
+           "target": "price"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"x1":1,"x2":2,"y":3}, ...],
+           "features": ["x1", "x2"],
+           "target": "y"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    모델 파라미터:
       - features (list[str], required): 독립변수(X) 컬럼명들
       - target (str, required): 종속변수(y) 컬럼명
       - test_size (float, default=0.2): 테스트 데이터 비율 (0~1)

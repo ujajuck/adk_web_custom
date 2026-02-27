@@ -15,19 +15,42 @@ def histogram(args: Dict[str, Any]) -> Dict[str, Any]:
     description은 '그래프에서 보이는 패턴'만 담는다(왜도/첨도/꼬리/다봉성/집중도 등).
     원인 분석/검정/모델링은 ml_toolbox로 분리한다.
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"x":1},{"x":2},{"x":3}],"columns":["x"],"bins":30}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"pokemon_data","file_name":"pokemon.csv"},"columns":["HP"],"bins":40}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "pokemon_data",
+           "columns": ["HP"],
+           "bins": 40
+         }
 
-    파라미터(수치형):
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/pokemon.csv",
+           "columns": ["HP"],
+           "bins": 30
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"x":1}, {"x":2}, {"x":3}],
+           "columns": ["x"],
+           "bins": 30
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    그래프 파라미터 (수치형):
       - bins (int, default=30)
       - range_min/range_max (float, optional): 둘 다 지정 시 범위 고정
       - density (bool, default=False)
       - log_y (bool, default=False)
 
-    파라미터(범주형):
+    그래프 파라미터 (범주형):
       - top_k (int, default=30): 상위 N개 카테고리만 표시
       - other_label (str, default="(others)"): top_k 밖을 묶을 라벨
 

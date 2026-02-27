@@ -20,13 +20,37 @@ def random_forest_classifier(args: Dict[str, Any]) -> Dict[str, Any]:
     Note: 이 구현은 scikit-learn 없이 순수 Python/NumPy로 구현된 간단한 버전이다.
     대규모 데이터나 프로덕션 환경에서는 scikit-learn 사용을 권장한다.
 
-    입력 예시:
-      - direct:
-        {"kind":"direct","data":[{"x1":1,"x2":2,"label":"A"},...],"features":["x1","x2"],"target":"label"}
-      - locator(LLM이 채우는 필드: artifact_name/file_name):
-        {"kind":"locator","artifact_locator":{"artifact_name":"iris","file_name":"iris.csv"},"features":["sepal_length","sepal_width"],"target":"species"}
+    데이터 입력 방식 (source_type으로 구분):
+      1. artifact (권장) - ADK 아티팩트에서 로드:
+         {
+           "source_type": "artifact",
+           "artifact_name": "iris",
+           "columns": ["sepal_length", "sepal_width", "species"],
+           "features": ["sepal_length", "sepal_width"],
+           "target": "species"
+         }
 
-    파라미터:
+      2. file - 로컬 파일에서 로드:
+         {
+           "source_type": "file",
+           "path": "C:/data/iris.csv",
+           "features": ["sepal_length", "sepal_width"],
+           "target": "species"
+         }
+
+      3. direct - 데이터 직접 전달:
+         {
+           "source_type": "direct",
+           "data": [{"x1":1,"x2":2,"label":"A"}, ...],
+           "features": ["x1", "x2"],
+           "target": "label"
+         }
+
+      하위 호환 (기존 형식):
+        - kind="direct" + data=[...]
+        - kind="locator" + artifact_locator={...}
+
+    모델 파라미터:
       - features (list[str], required): 독립변수(X) 컬럼명들
       - target (str, required): 종속변수(y, 분류 레이블) 컬럼명
       - n_trees (int, default=10): 트리 개수 (많을수록 안정적이나 느림)
