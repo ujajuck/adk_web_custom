@@ -6,6 +6,7 @@ ADK 이벤트에서 툴 호출 정보를 파싱하여 아티팩트 흐름 그래
 
 from __future__ import annotations
 
+import os
 import re
 import logging
 from typing import Any, Optional
@@ -102,8 +103,24 @@ def _extract_tool_calls(events: list[dict]) -> list[dict]:
 
 
 def _extract_artifact_locator(args: dict) -> Optional[dict]:
-    """툴 인자에서 입력 아티팩트 정보 추출."""
-    # artifact_locator 패턴
+    """툴 인자에서 입력 아티팩트 정보 추출.
+
+    지원 형식:
+    1. source_type: "artifact" (신규 multi-input 방식)
+    2. artifact_locator dict (기존 방식)
+    3. kind: "locator" + artifact_locator (기존 방식)
+    """
+    # 1. 신규 source_type: "artifact" 형식
+    if args.get("source_type") == "artifact":
+        artifact_name = args.get("artifact_name")
+        if artifact_name:
+            return {
+                "artifact_name": artifact_name,
+                "file_name": artifact_name,
+                "columns": args.get("columns"),
+            }
+
+    # 2. artifact_locator 패턴 (기존)
     locator = args.get("artifact_locator")
     if isinstance(locator, dict):
         return {
@@ -111,7 +128,7 @@ def _extract_artifact_locator(args: dict) -> Optional[dict]:
             "file_name": locator.get("file_name"),
         }
 
-    # kind가 locator인 경우
+    # 3. kind가 locator인 경우 (기존)
     if args.get("kind") == "locator" and "artifact_locator" in args:
         loc = args["artifact_locator"]
         if isinstance(loc, dict):
@@ -124,8 +141,24 @@ def _extract_artifact_locator(args: dict) -> Optional[dict]:
 
 
 def _extract_output_artifact(response: dict) -> Optional[dict]:
-    """툴 응답에서 출력 아티팩트 정보 추출."""
-    # outputs에서 resource_link 찾기
+    """툴 응답에서 출력 아티팩트 정보 추출.
+
+    지원 형식:
+    1. ADK 툴 응답: {"ok": true, "filename": "...", "version": ...}
+    2. MCP 툴 응답: {"outputs": [{"type": "resource_link", "uri": "..."}]}
+    3. description에서 파일명 추출
+    """
+    # 1. ADK 툴 응답 형식 (load_csv_from_path_and_save_artifact 등)
+    if response.get("ok") and response.get("filename"):
+        filename = response["filename"]
+        version = response.get("version")
+        return {
+            "artifact_name": filename,
+            "file_name": filename,
+            "version": version,
+        }
+
+    # 2. outputs에서 resource_link 찾기 (MCP 툴)
     outputs = response.get("outputs") or []
     for out in outputs:
         if isinstance(out, dict):
@@ -140,7 +173,7 @@ def _extract_output_artifact(response: dict) -> Optional[dict]:
                         "uri": uri,
                     }
 
-    # description에서 정보 추출 시도
+    # 3. description에서 정보 추출 시도
     desc = response.get("description", "")
     if desc:
         # 파일명 패턴 찾기
@@ -235,7 +268,7 @@ def parse_artifact_flow(
                         target=output_id,
                         tool_name=tool_name,
                         tool_args=tool_args,
-                        label=_get_tool_label(tool_name),
+                        label=_get_tool_label(tool_name, tool_args),
                     )
                     flow.add_edge(edge)
                 elif output_id:
@@ -255,7 +288,7 @@ def parse_artifact_flow(
                         target=output_id,
                         tool_name=tool_name,
                         tool_args=tool_args,
-                        label=_get_tool_label(tool_name),
+                        label=_get_tool_label(tool_name, tool_args),
                     )
                     flow.add_edge(edge)
 
@@ -275,8 +308,13 @@ def parse_artifact_flow(
     return flow
 
 
-def _get_tool_label(tool_name: str) -> str:
-    """툴 이름을 사람이 읽기 쉬운 라벨로 변환."""
+def _get_tool_label(tool_name: str, tool_args: Optional[dict] = None) -> str:
+    """툴 이름을 사람이 읽기 쉬운 라벨로 변환.
+
+    Args:
+        tool_name: 툴 이름
+        tool_args: 툴 인자 (컬럼 정보 등 추가 컨텍스트용)
+    """
     labels = {
         "bar_plot": "막대 그래프",
         "histogram": "히스토그램",
@@ -289,5 +327,39 @@ def _get_tool_label(tool_name: str) -> str:
         "linear_regression": "선형 회귀",
         "random_forest_classifier": "랜덤 포레스트",
         "kmeans_clustering": "K-평균 클러스터링",
+        "load_csv_from_path_and_save_artifact": "데이터 로드",
     }
-    return labels.get(tool_name, tool_name)
+    base_label = labels.get(tool_name, tool_name)
+
+    # 컬럼 정보가 있으면 라벨에 추가
+    if tool_args:
+        # 데이터 로드 툴: 파일 경로 표시
+        if tool_name == "load_csv_from_path_and_save_artifact":
+            path = tool_args.get("path", "")
+            if path:
+                # 경로에서 파일명만 추출
+                filename = os.path.basename(path)
+                return f"{base_label}[{filename}]"
+            artifact_name = tool_args.get("artifact_name")
+            if artifact_name:
+                return f"{base_label}[{artifact_name}]"
+
+        columns = tool_args.get("columns") or tool_args.get("column")
+        if columns:
+            if isinstance(columns, list):
+                col_str = ", ".join(str(c) for c in columns[:3])
+                if len(columns) > 3:
+                    col_str += "..."
+            else:
+                col_str = str(columns)
+            return f"{base_label}[{col_str}]"
+
+        # x, y 컬럼 정보
+        x_col = tool_args.get("x")
+        y_col = tool_args.get("y")
+        if x_col and y_col:
+            return f"{base_label}[{x_col}, {y_col}]"
+        elif x_col:
+            return f"{base_label}[{x_col}]"
+
+    return base_label
