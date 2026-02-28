@@ -316,17 +316,32 @@ def _get_tool_label(tool_name: str, tool_args: Optional[dict] = None) -> str:
         tool_args: 툴 인자 (컬럼 정보 등 추가 컨텍스트용)
     """
     labels = {
+        # plot_toolbox (prefix 포함/미포함)
         "bar_plot": "막대 그래프",
+        "plot_bar_plot": "막대 그래프",
         "histogram": "히스토그램",
+        "plot_histogram": "히스토그램",
         "scatter_plot": "산점도",
+        "plot_scatter_plot": "산점도",
         "line_plot": "선 그래프",
+        "plot_line_plot": "선 그래프",
         "pie_chart": "파이 차트",
+        "plot_pie_chart": "파이 차트",
+        # preprocess_toolbox
         "fill_missing": "결측치 처리",
+        "preprocess_fill_missing": "결측치 처리",
         "normalize": "정규화",
+        "preprocess_normalize": "정규화",
         "encode_categorical": "범주형 인코딩",
+        "preprocess_encode_categorical": "범주형 인코딩",
+        # ml_toolbox
         "linear_regression": "선형 회귀",
+        "ml_linear_regression": "선형 회귀",
         "random_forest_classifier": "랜덤 포레스트",
+        "ml_random_forest_classifier": "랜덤 포레스트",
         "kmeans_clustering": "K-평균 클러스터링",
+        "ml_kmeans_clustering": "K-평균 클러스터링",
+        # ADK native tools
         "load_csv_from_path_and_save_artifact": "데이터 로드",
     }
     base_label = labels.get(tool_name, tool_name)

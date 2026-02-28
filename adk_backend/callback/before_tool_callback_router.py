@@ -12,22 +12,34 @@ from ..policies.before_tool_inject_artifact_tabular import (
 
 ToolPolicy = callable
 
-# 아티팩트 주입이 필요한 MCP 툴 목록
+# 아티팩트 주입이 필요한 MCP 툴 목록 (prefix 포함)
 ARTIFACT_INJECTION_TOOLS = {
-    # plot_toolbox
+    # plot_toolbox (prefix="plot")
+    "plot_bar_plot",
+    "plot_histogram",
+    "plot_scatter_plot",
+    "plot_line_plot",
+    "plot_pie_chart",
+    # preprocess_toolbox (prefix="preprocess" 또는 없음)
+    "preprocess_fill_missing",
+    "preprocess_normalize",
+    "preprocess_encode_categorical",
+    "fill_missing",
+    "normalize",
+    "encode_categorical",
+    # ml_toolbox (prefix="ml" 또는 없음)
+    "ml_linear_regression",
+    "ml_random_forest_classifier",
+    "ml_kmeans_clustering",
+    "linear_regression",
+    "random_forest_classifier",
+    "kmeans_clustering",
+    # prefix 없는 버전도 포함 (호환성)
     "bar_plot",
     "histogram",
     "scatter_plot",
     "line_plot",
     "pie_chart",
-    # preprocess_toolbox
-    "fill_missing",
-    "normalize",
-    "encode_categorical",
-    # ml_toolbox
-    "linear_regression",
-    "random_forest_classifier",
-    "kmeans_clustering",
 }
 
 
