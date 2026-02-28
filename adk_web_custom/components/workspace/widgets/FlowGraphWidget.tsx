@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { Save, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Types for flow data
 interface FlowNode {
@@ -16,6 +18,7 @@ interface FlowEdge {
   source: string;
   target: string;
   tool_name: string;
+  tool_args?: Record<string, any>;
   label?: string;
 }
 
@@ -31,6 +34,7 @@ interface LayoutNode extends FlowNode {
   y: number;
   width: number;
   height: number;
+  isWidget: boolean; // true = 원형(위젯), false = 상자(아티팩트)
 }
 
 function calculateLayout(
@@ -98,19 +102,25 @@ function calculateLayout(
 
   // Calculate positions
   const layoutNodes: LayoutNode[] = [];
-  const maxLevel = Math.max(...Array.from(levels.values()), 0);
 
   levelGroups.forEach((group, level) => {
-    const totalHeight = group.length * nodeHeight + (group.length - 1) * verticalGap;
     let startY = 60;
 
     group.forEach((node, idx) => {
+      // 위젯 vs 아티팩트 구분
+      // 아티팩트: input 타입이거나 .csv/.json 파일명
+      const isArtifact =
+        node.node_type === "input" ||
+        /\.(csv|json|xlsx|parquet)$/i.test(node.file_name || "") ||
+        /\.(csv|json|xlsx|parquet)$/i.test(node.artifact_name || "");
+
       layoutNodes.push({
         ...node,
         x: 40 + level * (nodeWidth + horizontalGap),
         y: startY + idx * (nodeHeight + verticalGap),
         width: nodeWidth,
         height: nodeHeight,
+        isWidget: !isArtifact,
       });
     });
   });
@@ -121,11 +131,13 @@ function calculateLayout(
 interface FlowGraphWidgetProps {
   sessionId: string;
   backendUrl?: string;
+  checkedWidgets?: string[]; // 체크된 위젯 title 목록
 }
 
 export default function FlowGraphWidget({
   sessionId,
   backendUrl = "http://localhost:8080",
+  checkedWidgets = [],
 }: FlowGraphWidgetProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -134,6 +146,7 @@ export default function FlowGraphWidget({
   const [error, setError] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<LayoutNode | null>(null);
   const [layoutNodes, setLayoutNodes] = useState<LayoutNode[]>([]);
+  const [saving, setSaving] = useState(false);
 
   // Fetch flow data
   const fetchFlow = useCallback(async () => {
@@ -157,18 +170,66 @@ export default function FlowGraphWidget({
     return () => clearInterval(interval);
   }, [fetchFlow]);
 
+  // Filter nodes/edges based on checked widgets
+  const filteredData = React.useMemo(() => {
+    if (!flowData) return null;
+
+    // 체크된 위젯이 없으면 전체 표시
+    if (checkedWidgets.length === 0) {
+      return flowData;
+    }
+
+    // 체크된 위젯과 관련된 노드만 필터링
+    const relevantEdgeIds = new Set<string>();
+    const relevantNodeIds = new Set<string>();
+
+    flowData.edges.forEach((edge) => {
+      // 엣지의 label이 체크된 위젯과 일치하면 포함
+      if (edge.label && checkedWidgets.some((w) => edge.label?.includes(w))) {
+        relevantEdgeIds.add(edge.id);
+        relevantNodeIds.add(edge.source);
+        relevantNodeIds.add(edge.target);
+      }
+    });
+
+    // 노드의 label이 체크된 위젯과 일치하면 포함
+    flowData.nodes.forEach((node) => {
+      if (checkedWidgets.some((w) => node.label.includes(w))) {
+        relevantNodeIds.add(node.id);
+      }
+    });
+
+    // 관련 노드에 연결된 엣지도 포함
+    flowData.edges.forEach((edge) => {
+      if (relevantNodeIds.has(edge.source) || relevantNodeIds.has(edge.target)) {
+        relevantEdgeIds.add(edge.id);
+        relevantNodeIds.add(edge.source);
+        relevantNodeIds.add(edge.target);
+      }
+    });
+
+    const filteredNodes = flowData.nodes.filter((n) => relevantNodeIds.has(n.id));
+    const filteredEdges = flowData.edges.filter((e) => relevantEdgeIds.has(e.id));
+
+    return {
+      ...flowData,
+      nodes: filteredNodes.length > 0 ? filteredNodes : flowData.nodes,
+      edges: filteredEdges.length > 0 ? filteredEdges : flowData.edges,
+    };
+  }, [flowData, checkedWidgets]);
+
   // Calculate layout when flow data changes
   useEffect(() => {
-    if (!flowData || !containerRef.current) return;
+    if (!filteredData || !containerRef.current) return;
     const width = containerRef.current.clientWidth;
-    const nodes = calculateLayout(flowData.nodes, flowData.edges, width);
+    const nodes = calculateLayout(filteredData.nodes, filteredData.edges, width);
     setLayoutNodes(nodes);
-  }, [flowData]);
+  }, [filteredData]);
 
   // Draw the graph
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !flowData) return;
+    if (!canvas || !filteredData) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -185,7 +246,7 @@ export default function FlowGraphWidget({
     ctx.fillRect(0, 0, rect.width, rect.height);
 
     // Draw edges first
-    flowData.edges.forEach((edge) => {
+    filteredData.edges.forEach((edge) => {
       const sourceNode = layoutNodes.find((n) => n.id === edge.source);
       const targetNode = layoutNodes.find((n) => n.id === edge.target);
 
@@ -238,25 +299,42 @@ export default function FlowGraphWidget({
     // Draw nodes
     layoutNodes.forEach((node) => {
       const isHovered = hoveredNode?.id === node.id;
+      const centerX = node.x + node.width / 2;
+      const centerY = node.y + node.height / 2;
 
-      // Node background
-      ctx.beginPath();
-      ctx.roundRect(node.x, node.y, node.width, node.height, 8);
+      if (node.isWidget) {
+        // 위젯: 원형으로 그리기
+        const radius = Math.min(node.width, node.height) / 2 - 5;
 
-      // Color based on type
-      if (node.node_type === "input") {
-        ctx.fillStyle = isHovered ? "#3d5a80" : "#2b4162";
-      } else if (node.node_type === "output") {
-        ctx.fillStyle = isHovered ? "#5a8d6e" : "#3d6b52";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+
+        // 색상: output(초록), intermediate(보라)
+        if (node.node_type === "output") {
+          ctx.fillStyle = isHovered ? "#5a8d6e" : "#3d6b52";
+        } else {
+          ctx.fillStyle = isHovered ? "#6b5a8d" : "#4a3d6b";
+        }
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = isHovered ? "#ffffff" : "#4a90d9";
+        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.stroke();
       } else {
-        ctx.fillStyle = isHovered ? "#6b5a8d" : "#4a3d6b";
-      }
-      ctx.fill();
+        // 아티팩트: 상자로 그리기
+        ctx.beginPath();
+        ctx.roundRect(node.x, node.y, node.width, node.height, 8);
 
-      // Border
-      ctx.strokeStyle = isHovered ? "#ffffff" : "#4a90d9";
-      ctx.lineWidth = isHovered ? 2 : 1;
-      ctx.stroke();
+        // 색상: input(파랑)
+        ctx.fillStyle = isHovered ? "#3d5a80" : "#2b4162";
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = isHovered ? "#ffffff" : "#4a90d9";
+        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.stroke();
+      }
 
       // Node label
       ctx.font = "12px system-ui";
@@ -269,20 +347,9 @@ export default function FlowGraphWidget({
       if (label.length > 14) {
         label = label.substring(0, 12) + "...";
       }
-      ctx.fillText(label, node.x + node.width / 2, node.y + node.height / 2);
-
-      // Node type indicator
-      const typeLabel =
-        node.node_type === "input"
-          ? "IN"
-          : node.node_type === "output"
-            ? "OUT"
-            : "MID";
-      ctx.font = "9px system-ui";
-      ctx.fillStyle = "#8b9dc3";
-      ctx.fillText(typeLabel, node.x + node.width / 2, node.y + node.height - 8);
+      ctx.fillText(label, centerX, centerY);
     });
-  }, [flowData, layoutNodes, hoveredNode]);
+  }, [filteredData, layoutNodes, hoveredNode]);
 
   // Mouse interaction
   const handleMouseMove = useCallback(
@@ -294,14 +361,48 @@ export default function FlowGraphWidget({
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      const hovered = layoutNodes.find(
-        (n) => x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height,
-      );
+      const hovered = layoutNodes.find((n) => {
+        if (n.isWidget) {
+          // 원형 히트 테스트
+          const centerX = n.x + n.width / 2;
+          const centerY = n.y + n.height / 2;
+          const radius = Math.min(n.width, n.height) / 2 - 5;
+          const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+          return dist <= radius;
+        } else {
+          // 사각형 히트 테스트
+          return x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height;
+        }
+      });
 
       setHoveredNode(hovered || null);
     },
     [layoutNodes],
   );
+
+  // Save to notebook
+  const handleSave = useCallback(async () => {
+    if (!filteredData) return;
+
+    setSaving(true);
+    try {
+      // 노트북에 저장 이벤트 발생
+      window.dispatchEvent(
+        new CustomEvent("notebook:add", {
+          detail: {
+            type: "flow",
+            sessionId,
+            data: filteredData,
+            title: `Flow Graph - ${new Date().toLocaleString()}`,
+          },
+        }),
+      );
+    } catch (err) {
+      console.error("Failed to save to notebook:", err);
+    } finally {
+      setSaving(false);
+    }
+  }, [filteredData, sessionId]);
 
   if (loading) {
     return (
@@ -319,7 +420,7 @@ export default function FlowGraphWidget({
     );
   }
 
-  if (!flowData || flowData.nodes.length === 0) {
+  if (!filteredData || filteredData.nodes.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-slate-900 text-slate-400">
         <svg
@@ -345,9 +446,40 @@ export default function FlowGraphWidget({
 
   return (
     <div ref={containerRef} className="relative h-full w-full bg-slate-900">
+      {/* Top toolbar */}
+      <div className="absolute left-2 right-2 top-2 z-10 flex items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleSave}
+          disabled={saving}
+          className="h-8 gap-1.5 bg-slate-700 text-slate-200 hover:bg-slate-600"
+        >
+          <Save size={14} />
+          {saving ? "저장 중..." : "노트북에 저장"}
+        </Button>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={fetchFlow}
+          className="h-8 w-8 bg-slate-700 p-0 text-slate-200 hover:bg-slate-600"
+          title="새로고침"
+        >
+          <RefreshCw size={14} />
+        </Button>
+
+        {checkedWidgets.length > 0 && (
+          <span className="ml-auto text-xs text-slate-400">
+            {checkedWidgets.length}개 위젯 선택됨
+          </span>
+        )}
+      </div>
+
       <canvas
         ref={canvasRef}
         className="h-full w-full"
+        style={{ paddingTop: 40 }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoveredNode(null)}
       />
@@ -358,7 +490,7 @@ export default function FlowGraphWidget({
           className="pointer-events-none absolute z-10 max-w-xs rounded bg-slate-800 px-3 py-2 text-sm text-white shadow-lg"
           style={{
             left: hoveredNode.x + hoveredNode.width + 10,
-            top: hoveredNode.y,
+            top: hoveredNode.y + 40,
           }}
         >
           <div className="font-medium">{hoveredNode.label}</div>
@@ -373,12 +505,7 @@ export default function FlowGraphWidget({
             </div>
           )}
           <div className="mt-1 text-xs text-slate-500">
-            Type:{" "}
-            {hoveredNode.node_type === "input"
-              ? "Input Data"
-              : hoveredNode.node_type === "output"
-                ? "Output Result"
-                : "Intermediate"}
+            {hoveredNode.isWidget ? "위젯 (결과)" : "아티팩트 (데이터)"}
           </div>
         </div>
       )}
@@ -387,33 +514,13 @@ export default function FlowGraphWidget({
       <div className="absolute bottom-2 left-2 flex gap-3 rounded bg-slate-800/80 px-2 py-1 text-xs text-slate-300">
         <div className="flex items-center gap-1">
           <div className="h-3 w-3 rounded bg-[#2b4162]" />
-          <span>Input</span>
+          <span>아티팩트</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="h-3 w-3 rounded bg-[#3d6b52]" />
-          <span>Output</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="h-3 w-3 rounded bg-[#4a3d6b]" />
-          <span>Intermediate</span>
+          <div className="h-3 w-3 rounded-full bg-[#3d6b52]" />
+          <span>위젯(결과)</span>
         </div>
       </div>
-
-      {/* Refresh button */}
-      <button
-        onClick={fetchFlow}
-        className="absolute right-2 top-2 rounded bg-slate-700 p-1.5 text-slate-300 hover:bg-slate-600"
-        title="Refresh"
-      >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-      </button>
     </div>
   );
 }

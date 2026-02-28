@@ -27,10 +27,12 @@ export type WorkspaceWindow = {
   w: number;
   h: number;
   z: number;
+  checked: boolean; // 플로우 그래프에 표시 여부
 };
 
 type Ctx = {
   windows: WorkspaceWindow[];
+  checkedWidgets: string[]; // 체크된 위젯 ID 목록
   addTableWindow: (title: string, csvText: string) => void;
   addCsvTableWindow: (title: string, src: string) => void;
   addCsvFileWindow: (title: string, fileId: string) => void;
@@ -43,6 +45,7 @@ type Ctx = {
     id: string,
     patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>,
   ) => void;
+  toggleWindowCheck: (id: string) => void;
   bringToFront: (id: string) => void;
   closeWindow: (id: string) => void;
 };
@@ -73,6 +76,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         w: 640,
         h: 420,
         z,
+        checked: true, // 기본 체크
       },
     ]);
   }
@@ -93,6 +97,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         w: 640,
         h: 420,
         z,
+        checked: true,
       },
     ]);
   }
@@ -113,6 +118,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         w: 640,
         h: 420,
         z,
+        checked: true,
       },
     ]);
   }
@@ -136,6 +142,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         w: 720,
         h: 480,
         z,
+        checked: true,
       },
     ]);
   }
@@ -156,8 +163,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         w: 800,
         h: 500,
         z,
+        checked: false, // flow graph는 체크 대상 아님
       },
     ]);
+  }
+
+  function toggleWindowCheck(id: string) {
+    setWindows((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, checked: !w.checked } : w)),
+    );
   }
 
   function updateWindow(
@@ -180,19 +194,30 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setWindows((prev) => prev.filter((w) => w.id !== id));
   }
 
+  // 체크된 위젯 ID 목록 (flowGraph 제외)
+  const checkedWidgets = useMemo(
+    () =>
+      windows
+        .filter((w) => w.checked && w.widget.type !== "flowGraph")
+        .map((w) => w.widget.title), // title을 사용하여 flow 노드와 매칭
+    [windows],
+  );
+
   const value = useMemo<Ctx>(
     () => ({
       windows,
+      checkedWidgets,
       addTableWindow,
       addCsvTableWindow,
       addCsvFileWindow,
       addPlotlyWindow,
       addFlowGraphWindow,
       updateWindow,
+      toggleWindowCheck,
       bringToFront,
       closeWindow,
     }),
-    [windows],
+    [windows, checkedWidgets],
   );
 
   return (

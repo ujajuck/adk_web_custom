@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef } from "react";
 import { Rnd } from "react-rnd";
 import { Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,14 +16,19 @@ import ServerFilePicker, {
 } from "@/components/workspace/ServerFilePicker";
 
 export default function WorkspacePanel() {
-  const { windows, updateWindow, bringToFront, closeWindow } = useWorkspace();
+  const {
+    windows,
+    updateWindow,
+    bringToFront,
+    closeWindow,
+    toggleWindowCheck,
+    checkedWidgets,
+  } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
 
   const HEADER_H = 48;
 
   const isEmpty = useMemo(() => windows.length === 0, [windows.length]);
-
-  const [checkedById, setCheckedById] = useState<Record<string, boolean>>({});
 
   const requestBackendToReadFile = (file: ServerFileItem) => {
     const text = `C:\\MyFolder\\data\\${file.name}\n이 파일을 읽어줘`;
@@ -50,13 +55,6 @@ export default function WorkspacePanel() {
     window.dispatchEvent(new CustomEvent("workspace:save"));
   };
 
-  const toggleCheck = (winId: string) => {
-    setCheckedById((prev) => {
-      const next = !prev[winId];
-      return { ...prev, [winId]: next };
-    });
-  };
-
   function renderWidget(win: (typeof windows)[number]) {
     const w = win.widget;
     switch (w.type) {
@@ -67,7 +65,12 @@ export default function WorkspacePanel() {
       case "plotly":
         return <PlotlyFigureWidget fig={w.fig} />;
       case "flowGraph":
-        return <FlowGraphWidget sessionId={w.sessionId} />;
+        return (
+          <FlowGraphWidget
+            sessionId={w.sessionId}
+            checkedWidgets={checkedWidgets}
+          />
+        );
       default:
         return (
           <div className="p-3 text-muted-foreground">unknown widget</div>
@@ -100,7 +103,7 @@ export default function WorkspacePanel() {
         />
 
         {windows.map((win) => {
-          const checked = Boolean(checkedById[win.id]);
+          const isFlowGraph = win.widget.type === "flowGraph";
 
           return (
             <Rnd
@@ -134,25 +137,27 @@ export default function WorkspacePanel() {
                   {win.widget.title}
                 </span>
 
-                {/* check toggle */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleCheck(win.id);
-                  }}
-                  aria-label={checked ? "체크 해제" : "체크"}
-                  title={checked ? "체크 해제" : "체크"}
-                  className={cn(
-                    "h-7 w-7 shrink-0",
-                    checked
-                      ? "border-success text-success"
-                      : "bg-success text-success-foreground border-success hover:bg-success/90",
-                  )}
-                >
-                  <Check size={14} />
-                </Button>
+                {/* check toggle - flowGraph 위젯은 표시 안함 */}
+                {!isFlowGraph && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleWindowCheck(win.id);
+                    }}
+                    aria-label={win.checked ? "체크 해제" : "체크"}
+                    title={win.checked ? "Flow에서 제외" : "Flow에 포함"}
+                    className={cn(
+                      "h-7 w-7 shrink-0",
+                      win.checked
+                        ? "bg-success text-success-foreground border-success hover:bg-success/90"
+                        : "border-muted-foreground/50 text-muted-foreground",
+                    )}
+                  >
+                    <Check size={14} />
+                  </Button>
+                )}
 
                 {/* close */}
                 <Button
