@@ -10,9 +10,11 @@ from ..utils.plot_io import save_outputs_and_build_response, make_job_id
 
 
 def line_plot(
-    data: List[Dict[str, Any]],
-    x: str,
-    y: Union[str, List[str]],
+    data: Optional[List[Dict[str, Any]]] = None,
+    artifact_name: Optional[str] = None,
+    source_type: Optional[str] = None,
+    x: Optional[str] = None,
+    y: Optional[Union[str, List[str]]] = None,
     columns: Optional[List[str]] = None,
     group_by: Optional[str] = None,
     agg: str = "mean",
@@ -25,7 +27,9 @@ def line_plot(
 
     Args:
         data: 데이터 레코드 목록. 예: [{"date": "2024-01", "sales": 100}, ...]
-        x: x축 컬럼명 (날짜/시간 또는 순서형, 필수)
+        artifact_name: ADK 아티팩트 이름 (예: "timeseries.csv"). data 대신 사용 가능
+        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
+        x: x축 컬럼명 (날짜/시간 또는 순서형)
         y: y축 컬럼명 (단일 문자열 또는 여러 컬럼의 리스트)
         columns: 사용할 컬럼 목록 (x, y 대신 지정 가능)
         group_by: 그룹별로 선을 분리할 범주형 컬럼
@@ -39,7 +43,10 @@ def line_plot(
         {"status": "success", "outputs": [...], "description": "..."}
 
     Example:
+        # 직접 데이터 전달
         line_plot(data=[{"month": "Jan", "sales": 100}], x="month", y="sales")
+        # 아티팩트 사용 (ADK callback이 data를 주입)
+        line_plot(source_type="artifact", artifact_name="timeseries.csv", x="date", y="value")
     """
     if not data:
         raise ValueError("data가 비어있습니다.")

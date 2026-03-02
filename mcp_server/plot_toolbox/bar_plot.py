@@ -10,7 +10,9 @@ from ..utils.plot_io import save_outputs_and_build_response, make_job_id
 
 
 def bar_plot(
-    data: List[Dict[str, Any]],
+    data: Optional[List[Dict[str, Any]]] = None,
+    artifact_name: Optional[str] = None,
+    source_type: Optional[str] = None,
     x: Optional[str] = None,
     y: Optional[str] = None,
     columns: Optional[List[str]] = None,
@@ -24,6 +26,8 @@ def bar_plot(
 
     Args:
         data: 데이터 레코드 목록. 예: [{"category": "A", "value": 10}, ...]
+        artifact_name: ADK 아티팩트 이름 (예: "sales.csv"). data 대신 사용 가능
+        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
         x: x축(범주) 컬럼명. 없으면 columns[0] 또는 첫 컬럼
         y: y축(수치) 컬럼명. 없으면 빈도(count) 모드
         columns: 사용할 컬럼 목록 (x, y 대신 지정 가능)
@@ -37,7 +41,10 @@ def bar_plot(
         {"status": "success", "outputs": [...], "description": "..."}
 
     Example:
+        # 직접 데이터 전달
         bar_plot(data=[{"cat": "A", "val": 10}], x="cat", y="val")
+        # 아티팩트 사용 (ADK callback이 data를 주입)
+        bar_plot(source_type="artifact", artifact_name="sales.csv", x="category", y="amount")
     """
     if not data:
         raise ValueError("data가 비어있습니다.")

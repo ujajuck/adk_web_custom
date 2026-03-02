@@ -10,9 +10,11 @@ from ..utils.plot_io import save_outputs_and_build_response, make_job_id
 
 
 def scatter_plot(
-    data: List[Dict[str, Any]],
-    x: str,
-    y: str,
+    data: Optional[List[Dict[str, Any]]] = None,
+    artifact_name: Optional[str] = None,
+    source_type: Optional[str] = None,
+    x: Optional[str] = None,
+    y: Optional[str] = None,
     columns: Optional[List[str]] = None,
     color: Optional[str] = None,
     size: Optional[str] = None,
@@ -25,8 +27,10 @@ def scatter_plot(
 
     Args:
         data: 데이터 레코드 목록. 예: [{"x": 1, "y": 2}, ...]
-        x: x축 컬럼명 (수치형, 필수)
-        y: y축 컬럼명 (수치형, 필수)
+        artifact_name: ADK 아티팩트 이름 (예: "data.csv"). data 대신 사용 가능
+        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
+        x: x축 컬럼명 (수치형)
+        y: y축 컬럼명 (수치형)
         columns: 사용할 컬럼 목록 ([x컬럼, y컬럼] 형태로도 지정 가능)
         color: 점 색상을 구분할 범주형 컬럼
         size: 점 크기를 결정할 수치형 컬럼
@@ -39,7 +43,10 @@ def scatter_plot(
         {"status": "success", "outputs": [...], "description": "..."}
 
     Example:
+        # 직접 데이터 전달
         scatter_plot(data=[{"age": 25, "income": 50000}], x="age", y="income")
+        # 아티팩트 사용 (ADK callback이 data를 주입)
+        scatter_plot(source_type="artifact", artifact_name="data.csv", x="age", y="income")
     """
     if not data:
         raise ValueError("data가 비어있습니다.")

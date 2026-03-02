@@ -10,7 +10,9 @@ from ..utils.plot_io import save_outputs_and_build_response, make_job_id
 
 
 def histogram(
-    data: List[Dict[str, Any]],
+    data: Optional[List[Dict[str, Any]]] = None,
+    artifact_name: Optional[str] = None,
+    source_type: Optional[str] = None,
     column: Optional[str] = None,
     columns: Optional[List[str]] = None,
     bins: int = 30,
@@ -28,6 +30,8 @@ def histogram(
 
     Args:
         data: 데이터 레코드 목록. 예: [{"col1": 1, "col2": "a"}, ...]
+        artifact_name: ADK 아티팩트 이름 (예: "pokemon.csv"). data 대신 사용 가능
+        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
         column: 히스토그램을 그릴 컬럼명 (단일 컬럼)
         columns: 히스토그램을 그릴 컬럼명 목록 (첫 번째 컬럼 사용)
         bins: 히스토그램 구간 수 (수치형, 기본값 30)
@@ -45,7 +49,10 @@ def histogram(
         {"status": "success", "outputs": [...], "description": "..."}
 
     Example:
+        # 직접 데이터 전달
         histogram(data=[{"age": 25}, {"age": 30}], column="age", bins=10)
+        # 아티팩트 사용 (ADK callback이 data를 주입)
+        histogram(source_type="artifact", artifact_name="pokemon.csv", column="weight_kg")
     """
     # DataFrame 생성
     if not data:

@@ -10,7 +10,9 @@ from ..utils.plot_io import save_outputs_and_build_response, make_job_id
 
 
 def pie_chart(
-    data: List[Dict[str, Any]],
+    data: Optional[List[Dict[str, Any]]] = None,
+    artifact_name: Optional[str] = None,
+    source_type: Optional[str] = None,
     labels: Optional[str] = None,
     values: Optional[str] = None,
     columns: Optional[List[str]] = None,
@@ -29,7 +31,9 @@ def pie_chart(
 
     Args:
         data: 데이터 레코드 목록. 예: [{"category": "A", "value": 30}, ...]
-        labels: 범주/라벨 컬럼명 (필수)
+        artifact_name: ADK 아티팩트 이름 (예: "market.csv"). data 대신 사용 가능
+        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
+        labels: 범주/라벨 컬럼명
         values: 값 컬럼명. 없으면 각 범주의 빈도(count)를 사용
         columns: 사용할 컬럼 목록 (labels, values 대신 지정 가능)
         agg: values 집계 방법 (sum, mean, count)
@@ -44,7 +48,10 @@ def pie_chart(
         {"status": "success", "outputs": [...], "description": "..."}
 
     Example:
+        # 직접 데이터 전달
         pie_chart(data=[{"category": "A", "value": 30}], labels="category", values="value")
+        # 아티팩트 사용 (ADK callback이 data를 주입)
+        pie_chart(source_type="artifact", artifact_name="market.csv", labels="company", values="share")
     """
     if not data:
         raise ValueError("data가 비어있습니다.")
