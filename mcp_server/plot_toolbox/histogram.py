@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
 from ..utils.plot_io import save_outputs_and_build_response, make_job_id
+from ..schema.histogram_request import HistogramRequest
 
 
 def histogram(
-    data: Optional[List[Dict[str, Any]]] = None,
-    artifact_name: Optional[str] = None,
-    source_type: Optional[str] = None,
+    source: Optional[Dict[str, Any]] = None,
     column: Optional[str] = None,
     columns: Optional[List[str]] = None,
     bins: int = 30,
@@ -28,10 +27,16 @@ def histogram(
 ) -> Dict[str, Any]:
     """히스토그램(Plotly)을 생성하여 JSON으로 저장하고 resource_link를 반환합니다.
 
+    데이터 소스 지정 방식:
+      1. direct: source={"source_type": "direct", "data": [...]}
+      2. artifact: source={"source_type": "artifact", "artifact_name": "..."}
+      3. file: source={"source_type": "file", "path": "..."}
+
     Args:
-        data: 데이터 레코드 목록. 예: [{"col1": 1, "col2": "a"}, ...]
-        artifact_name: ADK 아티팩트 이름 (예: "pokemon.csv"). data 대신 사용 가능
-        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
+        source: 데이터 소스 객체
+            - direct: {"source_type": "direct", "data": [{"col": val}, ...]}
+            - artifact: {"source_type": "artifact", "artifact_name": "pokemon.csv"}
+            - file: {"source_type": "file", "path": "/path/to/file.csv"}
         column: 히스토그램을 그릴 컬럼명 (단일 컬럼)
         columns: 히스토그램을 그릴 컬럼명 목록 (첫 번째 컬럼 사용)
         bins: 히스토그램 구간 수 (수치형, 기본값 30)
@@ -50,18 +55,33 @@ def histogram(
 
     Example:
         # 직접 데이터 전달
-        histogram(data=[{"age": 25}, {"age": 30}], column="age", bins=10)
-        # 아티팩트 사용 (ADK callback이 data를 주입)
-        histogram(source_type="artifact", artifact_name="pokemon.csv", column="weight_kg")
+        histogram(source={"source_type": "direct", "data": [{"age": 25}]}, column="age")
+        # 아티팩트 사용 (ADK callback이 user_id, session_id 자동 주입)
+        histogram(source={"source_type": "artifact", "artifact_name": "pokemon.csv"}, column="weight_kg")
     """
-    # DataFrame 생성
-    if not data:
-        raise ValueError("data가 비어있습니다.")
-    df = pd.DataFrame(data)
+    # Request 스키마 구성 및 DataFrame 로드
+    if source is None:
+        raise ValueError("source가 필요합니다. (예: source={'source_type': 'direct', 'data': [...]})")
 
-    # 컬럼 선택
-    col = _pick_column(df, column, columns)
-    chart_title = title or f"Histogram: {col}"
+    request = HistogramRequest(
+        source=source,
+        column=column,
+        columns=columns,
+        bins=bins,
+        title=title,
+        density=density,
+        log_y=log_y,
+        range_min=range_min,
+        range_max=range_max,
+        top_k=top_k,
+        other_label=other_label,
+        null_label=null_label,
+        numeric_ratio_threshold=numeric_ratio_threshold,
+    )
+
+    df = request.resolve_dataframe()
+    col = request.get_column(df)
+    chart_title = request.title or f"Histogram: {col}"
 
     s = df[col]
     n_total = int(len(s))
@@ -72,16 +92,18 @@ def histogram(
     n_num = int(s_num.notna().sum())
     denom = max(1, (n_total - n_missing))
     numeric_ratio = n_num / denom
-    is_numeric = numeric_ratio >= numeric_ratio_threshold
+    is_numeric = numeric_ratio >= request.numeric_ratio_threshold
 
     if is_numeric:
         result, meta = _build_numeric_histogram(
-            s_num, col, chart_title, bins, density, log_y, range_min, range_max, n_total, n_missing
+            s_num, col, chart_title, request.bins, request.density, request.log_y,
+            request.range_min, request.range_max, n_total, n_missing
         )
         description = _numeric_description(meta)
     else:
         result, meta = _build_categorical_histogram(
-            s, col, chart_title, top_k, other_label, null_label, n_total, n_missing
+            s, col, chart_title, request.top_k, request.other_label, request.null_label,
+            n_total, n_missing
         )
         description = _categorical_description(meta)
 
@@ -92,17 +114,6 @@ def histogram(
         payloads={"json": result},
         description=description,
     )
-
-
-def _pick_column(df: pd.DataFrame, column: Optional[str], columns: Optional[List[str]]) -> str:
-    """컬럼 선택 우선순위: column -> columns[0] -> 'x' -> 첫 컬럼"""
-    if column and column in df.columns:
-        return column
-    if columns and len(columns) > 0 and columns[0] in df.columns:
-        return columns[0]
-    if "x" in df.columns:
-        return "x"
-    return df.columns[0]
 
 
 def _build_numeric_histogram(

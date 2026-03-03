@@ -7,12 +7,11 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from ..utils.plot_io import save_outputs_and_build_response, make_job_id
+from ..schema.bar_plot_request import BarPlotRequest
 
 
 def bar_plot(
-    data: Optional[List[Dict[str, Any]]] = None,
-    artifact_name: Optional[str] = None,
-    source_type: Optional[str] = None,
+    source: Optional[Dict[str, Any]] = None,
     x: Optional[str] = None,
     y: Optional[str] = None,
     columns: Optional[List[str]] = None,
@@ -24,10 +23,16 @@ def bar_plot(
 ) -> Dict[str, Any]:
     """막대그래프(Plotly)를 생성하여 JSON으로 저장하고 resource_link를 반환합니다.
 
+    데이터 소스 지정 방식:
+      1. direct: source={"source_type": "direct", "data": [...]}
+      2. artifact: source={"source_type": "artifact", "artifact_name": "..."}
+      3. file: source={"source_type": "file", "path": "..."}
+
     Args:
-        data: 데이터 레코드 목록. 예: [{"category": "A", "value": 10}, ...]
-        artifact_name: ADK 아티팩트 이름 (예: "sales.csv"). data 대신 사용 가능
-        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
+        source: 데이터 소스 객체
+            - direct: {"source_type": "direct", "data": [{"col": val}, ...]}
+            - artifact: {"source_type": "artifact", "artifact_name": "sales.csv"}
+            - file: {"source_type": "file", "path": "/path/to/file.csv"}
         x: x축(범주) 컬럼명. 없으면 columns[0] 또는 첫 컬럼
         y: y축(수치) 컬럼명. 없으면 빈도(count) 모드
         columns: 사용할 컬럼 목록 (x, y 대신 지정 가능)
@@ -42,33 +47,41 @@ def bar_plot(
 
     Example:
         # 직접 데이터 전달
-        bar_plot(data=[{"cat": "A", "val": 10}], x="cat", y="val")
-        # 아티팩트 사용 (ADK callback이 data를 주입)
-        bar_plot(source_type="artifact", artifact_name="sales.csv", x="category", y="amount")
+        bar_plot(source={"source_type": "direct", "data": [{"cat": "A", "val": 10}]}, x="cat", y="val")
+        # 아티팩트 사용 (ADK callback이 user_id, session_id 자동 주입)
+        bar_plot(source={"source_type": "artifact", "artifact_name": "sales.csv"}, x="category", y="amount")
     """
-    if not data:
-        raise ValueError("data가 비어있습니다.")
-    df = pd.DataFrame(data)
+    if source is None:
+        raise ValueError("source가 필요합니다. (예: source={'source_type': 'direct', 'data': [...]})")
 
-    # 컬럼 선택
-    x_col = _pick_x(df, x, columns)
-    y_col = y if y and y in df.columns else None
+    request = BarPlotRequest(
+        source=source,
+        x=x,
+        y=y,
+        columns=columns,
+        agg=agg,
+        top_k=top_k,
+        sort=sort,
+        title=title,
+        null_label=null_label,
+    )
 
-    if top_k <= 0:
-        raise ValueError("top_k는 1 이상의 정수여야 합니다.")
+    df = request.resolve_dataframe()
+    x_col = request.get_x_column(df)
+    y_col = request.get_y_column(df)
 
-    chart_title = title or (
-        f"Bar Plot: {x_col}" + (f" vs {y_col} ({agg})" if y_col else " (count)")
+    chart_title = request.title or (
+        f"Bar Plot: {x_col}" + (f" vs {y_col} ({request.agg})" if y_col else " (count)")
     )
 
     use_cols = [x_col] + ([y_col] if y_col else [])
     d = df[use_cols].copy()
-    d[x_col] = d[x_col].astype("string").fillna(null_label)
+    d[x_col] = d[x_col].astype("string").fillna(request.null_label)
 
-    s, y_label = _aggregate_series(d, x_col, y_col, agg.lower())
+    s, y_label = _aggregate_series(d, x_col, y_col, request.agg.lower())
 
     # 정렬
-    sort_lower = sort.lower()
+    sort_lower = request.sort.lower()
     if sort_lower == "asc":
         s = s.sort_values(ascending=True)
     elif sort_lower == "desc":
@@ -76,7 +89,7 @@ def bar_plot(
     elif sort_lower != "none":
         raise ValueError("sort는 desc|asc|none 중 하나여야 합니다.")
 
-    s = s.head(top_k)
+    s = s.head(request.top_k)
 
     x_labels = [str(i) for i in s.index.tolist()]
     y_vals = np.array([float(v) for v in s.values.tolist()], dtype=float)
@@ -94,9 +107,9 @@ def bar_plot(
         "meta": {
             "x": x_col,
             "y": y_col,
-            "agg": agg if y_col else "count",
-            "top_k": top_k,
-            "sort": sort,
+            "agg": request.agg if y_col else "count",
+            "top_k": request.top_k,
+            "sort": request.sort,
             "bars": len(x_labels),
             "pattern": pattern,
         },
@@ -108,14 +121,6 @@ def bar_plot(
         payloads={"json": result},
         description=description,
     )
-
-
-def _pick_x(df: pd.DataFrame, x: Optional[str], columns: Optional[List[str]]) -> str:
-    if x and x in df.columns:
-        return x
-    if columns and columns[0] in df.columns:
-        return columns[0]
-    return df.columns[0]
 
 
 def _aggregate_series(d: pd.DataFrame, x_col: str, y_col: Optional[str], agg: str) -> Tuple[pd.Series, str]:

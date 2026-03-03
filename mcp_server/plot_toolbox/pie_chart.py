@@ -7,12 +7,11 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from ..utils.plot_io import save_outputs_and_build_response, make_job_id
+from ..schema.pie_chart_request import PieChartRequest
 
 
 def pie_chart(
-    data: Optional[List[Dict[str, Any]]] = None,
-    artifact_name: Optional[str] = None,
-    source_type: Optional[str] = None,
+    source: Optional[Dict[str, Any]] = None,
     labels: Optional[str] = None,
     values: Optional[str] = None,
     columns: Optional[List[str]] = None,
@@ -29,10 +28,16 @@ def pie_chart(
     범주별 비율/구성을 시각화하는 데 적합합니다.
     상위 N개 항목만 표시하고 나머지는 "기타"로 묶을 수 있습니다.
 
+    데이터 소스 지정 방식:
+      1. direct: source={"source_type": "direct", "data": [...]}
+      2. artifact: source={"source_type": "artifact", "artifact_name": "..."}
+      3. file: source={"source_type": "file", "path": "..."}
+
     Args:
-        data: 데이터 레코드 목록. 예: [{"category": "A", "value": 30}, ...]
-        artifact_name: ADK 아티팩트 이름 (예: "market.csv"). data 대신 사용 가능
-        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
+        source: 데이터 소스 객체
+            - direct: {"source_type": "direct", "data": [{"col": val}, ...]}
+            - artifact: {"source_type": "artifact", "artifact_name": "market.csv"}
+            - file: {"source_type": "file", "path": "/path/to/file.csv"}
         labels: 범주/라벨 컬럼명
         values: 값 컬럼명. 없으면 각 범주의 빈도(count)를 사용
         columns: 사용할 컬럼 목록 (labels, values 대신 지정 가능)
@@ -49,29 +54,39 @@ def pie_chart(
 
     Example:
         # 직접 데이터 전달
-        pie_chart(data=[{"category": "A", "value": 30}], labels="category", values="value")
-        # 아티팩트 사용 (ADK callback이 data를 주입)
-        pie_chart(source_type="artifact", artifact_name="market.csv", labels="company", values="share")
+        pie_chart(source={"source_type": "direct", "data": [{"cat": "A", "val": 30}]}, labels="cat", values="val")
+        # 아티팩트 사용 (ADK callback이 user_id, session_id 자동 주입)
+        pie_chart(source={"source_type": "artifact", "artifact_name": "market.csv"}, labels="company", values="share")
     """
-    if not data:
-        raise ValueError("data가 비어있습니다.")
-    df = pd.DataFrame(data)
+    if source is None:
+        raise ValueError("source가 필요합니다. (예: source={'source_type': 'direct', 'data': [...]})")
 
-    # 라벨 컬럼 선택
-    labels_col = _pick_labels_column(df, labels, columns)
-    # 값 컬럼 선택
-    values_col = _pick_values_column(df, values, columns)
+    request = PieChartRequest(
+        source=source,
+        labels=labels,
+        values=values,
+        columns=columns,
+        agg=agg,
+        top_k=top_k,
+        other_label=other_label,
+        donut=donut,
+        show_percent=show_percent,
+        title=title,
+        null_label=null_label,
+    )
 
-    agg_method = agg.strip().lower() if agg else "sum"
-    if top_k <= 0:
-        raise ValueError("top_k는 1 이상의 정수여야 합니다.")
+    df = request.resolve_dataframe()
+    labels_col = request.get_labels_column(df)
+    values_col = request.get_values_column(df)
+
+    agg_method = request.agg.strip().lower() if request.agg else "sum"
 
     title_suffix = f" ({values_col})" if values_col else " (빈도)"
-    chart_title = title or f"Pie Chart: {labels_col}{title_suffix}"
+    chart_title = request.title or f"Pie Chart: {labels_col}{title_suffix}"
 
     # 데이터 준비
     d = df[[labels_col]].copy() if not values_col else df[[labels_col, values_col]].copy()
-    d[labels_col] = d[labels_col].astype("string").fillna(null_label)
+    d[labels_col] = d[labels_col].astype("string").fillna(request.null_label)
 
     if values_col:
         d[values_col] = pd.to_numeric(d[values_col], errors="coerce")
@@ -89,11 +104,11 @@ def pie_chart(
     # 정렬 후 상위 K개
     grouped = grouped.sort_values("value", ascending=False)
 
-    if len(grouped) > top_k:
-        top_data = grouped.head(top_k).copy()
-        others_sum = grouped.iloc[top_k:]["value"].sum()
+    if len(grouped) > request.top_k:
+        top_data = grouped.head(request.top_k).copy()
+        others_sum = grouped.iloc[request.top_k:]["value"].sum()
         if others_sum > 0:
-            others_row = pd.DataFrame([{"label": other_label, "value": others_sum}])
+            others_row = pd.DataFrame([{"label": request.other_label, "value": others_sum}])
             top_data = pd.concat([top_data, others_row], ignore_index=True)
         grouped = top_data
 
@@ -113,8 +128,8 @@ def pie_chart(
     fig = go.Figure(data=[go.Pie(
         labels=pie_labels,
         values=pie_values.tolist(),
-        hole=0.4 if donut else 0,
-        textinfo="percent+label" if show_percent else "label",
+        hole=0.4 if request.donut else 0,
+        textinfo="percent+label" if request.show_percent else "label",
         textposition="inside" if len(pie_labels) <= 8 else "auto",
     )])
 
@@ -130,8 +145,8 @@ def pie_chart(
         "agg": agg_method if values_col else "count",
         "n_categories": len(pie_labels),
         "total": float(total),
-        "top_k": top_k,
-        "donut": donut,
+        "top_k": request.top_k,
+        "donut": request.donut,
         "top1": top1,
         "top2": top2,
         "hhi": conc["hhi"],
@@ -149,28 +164,6 @@ def pie_chart(
         payloads={"json": result},
         description=description,
     )
-
-
-def _pick_labels_column(df: pd.DataFrame, labels: Optional[str], columns: Optional[List[str]]) -> str:
-    """라벨 컬럼 선택."""
-    if isinstance(labels, str) and labels in df.columns:
-        return labels
-    if columns and len(columns) >= 1 and columns[0] in df.columns:
-        return columns[0]
-    # 첫 번째 문자열/범주형 컬럼 자동 선택
-    for col in df.columns:
-        if df[col].dtype == "object" or str(df[col].dtype).startswith("category"):
-            return col
-    return df.columns[0]
-
-
-def _pick_values_column(df: pd.DataFrame, values: Optional[str], columns: Optional[List[str]]) -> Optional[str]:
-    """값 컬럼 선택."""
-    if isinstance(values, str) and values in df.columns:
-        return values
-    if columns and len(columns) >= 2 and columns[1] in df.columns:
-        return columns[1]
-    return None
 
 
 def _concentration_analysis(shares: np.ndarray) -> Dict[str, Any]:

@@ -6,14 +6,10 @@ from typing import Any, Dict, Optional
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
 
-from ..policies.before_tool_inject_artifact_tabular import (
-    before_tool_inject_artifact_tabular,
-)
-
 ToolPolicy = callable
 
-# 아티팩트 주입이 필요한 MCP 툴 목록 (prefix 포함)
-ARTIFACT_INJECTION_TOOLS = {
+# 아티팩트 소스 정보 주입이 필요한 MCP 툴 목록 (prefix 포함)
+ARTIFACT_SOURCE_TOOLS = {
     # plot_toolbox (prefix="plot")
     "plot_bar_plot",
     "plot_histogram",
@@ -38,7 +34,7 @@ ARTIFACT_INJECTION_TOOLS = {
     "bar_plot",
     "histogram",
     "scatter_plot",
-    "line_plot", #TODO 변경된 line plot 에서 source_type이 artifact인 데이터를 보낼때 session_id 와 user_id를 추가한 주소를 보내도록 콜백추가
+    "line_plot",
     "pie_chart",
 }
 
@@ -48,15 +44,92 @@ async def before_tool_callback_router(
     args: Dict[str, Any],
     tool_context: ToolContext,
 ) -> Optional[Dict[str, Any]]:
+    """MCP 툴 호출 전 args를 가공하는 라우터.
+
+    source.source_type="artifact"일 때 user_id, session_id를 자동 주입하여
+    MCP 서버가 아티팩트 파일을 직접 읽을 수 있도록 합니다.
+    """
     tool_name = getattr(tool, "name", "")
     logging.info(f"==> Called before_tool_callback: {tool_name}")
 
-    # source_type="artifact" 처리가 필요한 툴인지 확인
-    source_type = args.get("source_type")
+    if tool_name not in ARTIFACT_SOURCE_TOOLS:
+        return None
 
-    if tool_name in ARTIFACT_INJECTION_TOOLS:
-        # source_type이 "artifact"이거나 artifact_filename이 있으면 아티팩트 주입
-        if source_type == "artifact" or args.get("artifact_filename"):
-            return await before_tool_inject_artifact_tabular(tool, args, tool_context)
+    # source 객체 또는 source_type 확인
+    source = args.get("source")
+
+    if isinstance(source, dict) and source.get("source_type") == "artifact":
+        # Request 스키마 방식: source.source_type = "artifact"
+        return _inject_artifact_context_nested(args, tool_context)
+
+    # 레거시 방식: 최상위 source_type
+    source_type = args.get("source_type")
+    if source_type == "artifact":
+        return _inject_artifact_context_flat(args, tool_context)
 
     return None
+
+
+def _inject_artifact_context_nested(
+    args: Dict[str, Any],
+    tool_context: ToolContext,
+) -> Dict[str, Any]:
+    """source.source_type='artifact'일 때 source에 user_id, session_id 주입.
+
+    Request 스키마 방식에서 사용.
+    """
+    new_args = dict(args)
+    source = dict(new_args["source"])
+
+    # tool_context에서 user_id, session_id 추출
+    user_id = getattr(tool_context, "user_id", None)
+    session_id = getattr(tool_context, "session_id", None)
+
+    if user_id:
+        source["user_id"] = user_id
+    if session_id:
+        source["session_id"] = session_id
+
+    # 버전 기본값
+    if "version" not in source:
+        source["version"] = 0
+
+    new_args["source"] = source
+
+    logging.info(
+        f"==> Injected artifact context (nested): user_id={user_id}, "
+        f"session_id={session_id}, artifact_name={source.get('artifact_name')}"
+    )
+
+    return new_args
+
+
+def _inject_artifact_context_flat(
+    args: Dict[str, Any],
+    tool_context: ToolContext,
+) -> Dict[str, Any]:
+    """최상위 source_type='artifact'일 때 user_id, session_id 주입.
+
+    레거시 방식에서 사용.
+    """
+    new_args = dict(args)
+
+    # tool_context에서 user_id, session_id 추출
+    user_id = getattr(tool_context, "user_id", None)
+    session_id = getattr(tool_context, "session_id", None)
+
+    if user_id:
+        new_args["user_id"] = user_id
+    if session_id:
+        new_args["session_id"] = session_id
+
+    # 버전 기본값
+    if "version" not in new_args:
+        new_args["version"] = 0
+
+    logging.info(
+        f"==> Injected artifact context (flat): user_id={user_id}, "
+        f"session_id={session_id}, artifact_name={args.get('artifact_name')}"
+    )
+
+    return new_args

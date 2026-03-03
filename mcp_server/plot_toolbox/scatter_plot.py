@@ -7,12 +7,11 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from ..utils.plot_io import save_outputs_and_build_response, make_job_id
+from ..schema.scatter_plot_request import ScatterPlotRequest
 
 
 def scatter_plot(
-    data: Optional[List[Dict[str, Any]]] = None,
-    artifact_name: Optional[str] = None,
-    source_type: Optional[str] = None,
+    source: Optional[Dict[str, Any]] = None,
     x: Optional[str] = None,
     y: Optional[str] = None,
     columns: Optional[List[str]] = None,
@@ -25,10 +24,16 @@ def scatter_plot(
 ) -> Dict[str, Any]:
     """산점도(Scatter Plot)를 생성하여 JSON으로 저장하고 resource_link를 반환합니다.
 
+    데이터 소스 지정 방식:
+      1. direct: source={"source_type": "direct", "data": [...]}
+      2. artifact: source={"source_type": "artifact", "artifact_name": "..."}
+      3. file: source={"source_type": "file", "path": "..."}
+
     Args:
-        data: 데이터 레코드 목록. 예: [{"x": 1, "y": 2}, ...]
-        artifact_name: ADK 아티팩트 이름 (예: "data.csv"). data 대신 사용 가능
-        source_type: 데이터 소스 타입. "artifact"면 artifact_name 사용
+        source: 데이터 소스 객체
+            - direct: {"source_type": "direct", "data": [{"col": val}, ...]}
+            - artifact: {"source_type": "artifact", "artifact_name": "data.csv"}
+            - file: {"source_type": "file", "path": "/path/to/file.csv"}
         x: x축 컬럼명 (수치형)
         y: y축 컬럼명 (수치형)
         columns: 사용할 컬럼 목록 ([x컬럼, y컬럼] 형태로도 지정 가능)
@@ -44,31 +49,43 @@ def scatter_plot(
 
     Example:
         # 직접 데이터 전달
-        scatter_plot(data=[{"age": 25, "income": 50000}], x="age", y="income")
-        # 아티팩트 사용 (ADK callback이 data를 주입)
-        scatter_plot(source_type="artifact", artifact_name="data.csv", x="age", y="income")
+        scatter_plot(source={"source_type": "direct", "data": [{"age": 25, "income": 50000}]}, x="age", y="income")
+        # 아티팩트 사용 (ADK callback이 user_id, session_id 자동 주입)
+        scatter_plot(source={"source_type": "artifact", "artifact_name": "data.csv"}, x="age", y="income")
     """
-    if not data:
-        raise ValueError("data가 비어있습니다.")
-    df = pd.DataFrame(data)
+    if source is None:
+        raise ValueError("source가 필요합니다. (예: source={'source_type': 'direct', 'data': [...]})")
 
-    # 컬럼 선택
-    x_col = _resolve_col(df, x, columns, 0)
-    y_col = _resolve_col(df, y, columns, 1)
+    request = ScatterPlotRequest(
+        source=source,
+        x=x,
+        y=y,
+        columns=columns,
+        color=color,
+        size=size,
+        trendline=trendline,
+        title=title,
+        opacity=opacity,
+        max_points=max_points,
+    )
+
+    df = request.resolve_dataframe()
+    x_col = request.get_x_column(df)
+    y_col = request.get_y_column(df)
 
     if not x_col or x_col not in df.columns:
         raise ValueError("x 컬럼을 지정해주세요.")
     if not y_col or y_col not in df.columns:
         raise ValueError("y 컬럼을 지정해주세요.")
 
-    chart_title = title or f"Scatter Plot: {x_col} vs {y_col}"
+    chart_title = request.title or f"Scatter Plot: {x_col} vs {y_col}"
 
     # 데이터 준비
     use_cols = [x_col, y_col]
-    if color and color in df.columns:
-        use_cols.append(color)
-    if size and size in df.columns:
-        use_cols.append(size)
+    if request.color and request.color in df.columns:
+        use_cols.append(request.color)
+    if request.size and request.size in df.columns:
+        use_cols.append(request.size)
 
     d = df[use_cols].copy()
     d[x_col] = pd.to_numeric(d[x_col], errors="coerce")
@@ -76,8 +93,8 @@ def scatter_plot(
     d = d.dropna(subset=[x_col, y_col])
 
     n_original = len(d)
-    if len(d) > max_points:
-        d = d.sample(n=max_points, random_state=42)
+    if len(d) > request.max_points:
+        d = d.sample(n=request.max_points, random_state=42)
     n_points = len(d)
 
     if n_points == 0:
@@ -91,18 +108,18 @@ def scatter_plot(
 
     fig = go.Figure()
 
-    if color and color in d.columns:
-        for cat in d[color].dropna().unique():
-            mask = d[color] == cat
+    if request.color and request.color in d.columns:
+        for cat in d[request.color].dropna().unique():
+            mask = d[request.color] == cat
             scatter_kwargs = dict(
                 x=d.loc[mask, x_col].tolist(),
                 y=d.loc[mask, y_col].tolist(),
                 mode="markers",
                 name=str(cat),
-                opacity=opacity,
+                opacity=request.opacity,
             )
-            if size and size in d.columns:
-                scatter_kwargs["marker"] = dict(size=_normalize_sizes(d.loc[mask, size]))
+            if request.size and request.size in d.columns:
+                scatter_kwargs["marker"] = dict(size=_normalize_sizes(d.loc[mask, request.size]))
             fig.add_trace(go.Scatter(**scatter_kwargs))
     else:
         scatter_kwargs = dict(
@@ -110,14 +127,14 @@ def scatter_plot(
             y=d[y_col].tolist(),
             mode="markers",
             name="데이터",
-            opacity=opacity,
+            opacity=request.opacity,
         )
-        if size and size in d.columns:
-            scatter_kwargs["marker"] = dict(size=_normalize_sizes(d[size]))
+        if request.size and request.size in d.columns:
+            scatter_kwargs["marker"] = dict(size=_normalize_sizes(d[request.size]))
         fig.add_trace(go.Scatter(**scatter_kwargs))
 
     slope, intercept = None, None
-    if trendline:
+    if request.trendline:
         slope, intercept = _add_trendline(fig, x_vals, y_vals)
 
     fig.update_layout(title=chart_title, xaxis_title=x_col, yaxis_title=y_col)
@@ -126,7 +143,7 @@ def scatter_plot(
         "x": x_col,
         "y": y_col,
         "n_points": n_points,
-        "sampled": n_original > max_points,
+        "sampled": n_original > request.max_points,
         "n_original": n_original,
         "correlation": correlation,
         "correlation_strength": correlation_strength,
@@ -143,14 +160,6 @@ def scatter_plot(
         payloads={"json": result},
         description=description,
     )
-
-
-def _resolve_col(df: pd.DataFrame, col: Optional[str], columns: Optional[List[str]], idx: int) -> Optional[str]:
-    if col and col in df.columns:
-        return col
-    if columns and len(columns) > idx and columns[idx] in df.columns:
-        return columns[idx]
-    return None
 
 
 def _correlation_strength(r: float) -> str:
