@@ -38,7 +38,7 @@ ARTIFACT_INJECTION_TOOLS = {
     "bar_plot",
     "histogram",
     "scatter_plot",
-    "line_plot",
+    "line_plot", #TODO 변경된 line plot 에서 source_type이 artifact인 데이터를 보낼때 session_id 와 user_id를 추가한 주소를 보내도록 콜백추가
     "pie_chart",
 }
 
