@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { ChevronLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import React, { useMemo } from "react";
+import { ChevronLeft, FileText, Users, Plus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Props = {
@@ -17,8 +16,6 @@ type Notebook = {
 };
 
 export default function MenuPanel({ collapsed, onCollapse }: Props) {
-  const [query, setQuery] = useState("");
-
   const my_notebook: Notebook[] = useMemo(
     () => [
       { id: "s_001", title: "개인취향과 도메인", updatedAt: "2026-01-25" },
@@ -39,63 +36,69 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
   if (collapsed) return null;
 
   return (
-    <div className="h-full relative grid grid-rows-[auto_1fr]">
+    <div className="h-full flex flex-col bg-slate-50">
       {/* 헤더 */}
-      <div className="p-3 flex items-center gap-2">
-        <span className="font-bold text-foreground">Home</span>
+      <div className="px-4 py-3 flex items-center justify-between border-b bg-white">
+        <span className="font-semibold text-slate-800">노트북</span>
+        <button
+          onClick={onCollapse}
+          className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+          title="메뉴 접기"
+        >
+          <ChevronLeft size={18} />
+        </button>
+      </div>
+
+      {/* 새 노트북 버튼 */}
+      <div className="px-3 py-2">
+        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors">
+          <Plus size={16} />
+          새 노트북
+        </button>
       </div>
 
       {/* 목록 */}
-      <ScrollArea className="px-2 pb-14">
-        <p className="px-2 py-1.5 text-xs text-muted-foreground">Notebook</p>
+      <ScrollArea className="flex-1 px-3">
+        <div className="flex items-center gap-1.5 px-1 py-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
+          <FileText size={12} />
+          내 노트북
+        </div>
 
         {my_notebook.map((s) => (
           <button
             key={s.id}
             onClick={() => console.log("select session:", s.id)}
-            className="w-full text-left p-2.5 mx-1 mb-2 rounded-xl border bg-card hover:bg-accent transition-colors cursor-pointer"
+            className="w-full text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all group"
           >
-            <div className="font-semibold text-sm text-card-foreground">
+            <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
               {s.title}
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {s.id} · {s.updatedAt}
+            <div className="text-xs text-slate-400 mt-0.5">
+              {s.updatedAt}
             </div>
           </button>
         ))}
 
-        <p className="px-2 py-1.5 text-xs text-muted-foreground">
-          Shared Notebook
-        </p>
+        <div className="flex items-center gap-1.5 px-1 py-2 mt-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
+          <Users size={12} />
+          공유된 노트북
+        </div>
 
         {shared_notebook.map((s) => (
           <button
-            key={s.id}
+            key={`shared_${s.id}`}
             onClick={() => console.log("select session:", s.id)}
-            className="w-full text-left p-2.5 mx-1 mb-2 rounded-xl border bg-card hover:bg-accent transition-colors cursor-pointer"
+            className="w-full text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-all group"
           >
-            <div className="font-semibold text-sm text-card-foreground">
+            <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
               {s.title}
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {s.id} · {s.updatedAt}
+            <div className="text-xs text-slate-400 mt-0.5">
+              {s.updatedAt}
             </div>
           </button>
         ))}
       </ScrollArea>
-
-      {/* 접기 버튼 */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onCollapse}
-        aria-label="메뉴 접기"
-        title="메뉴 접기"
-        className="absolute right-3 bottom-3 shadow-lg gap-1"
-      >
-        <ChevronLeft size={16} />
-        접기
-      </Button>
     </div>
   );
 }

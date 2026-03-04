@@ -10,9 +10,9 @@ import ChatPanel from "@/components/chat/ChatPanel";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
-  const [rightWidth, setRightWidth] = useState(420);
+  const [rightWidth, setRightWidth] = useState(480);
 
-  const leftWidth = isLeftCollapsed ? 0 : 320;
+  const leftWidth = isLeftCollapsed ? 0 : 260;
 
   const draggingRef = useRef<null | "right">(null);
 
