@@ -20,6 +20,7 @@ from ..services.response_parser import (
     extract_assistant_text,
     extract_plotly_fig,
     extract_plotly_urls,
+    extract_resource_links_from_events,
 )
 from ..services.plotly_fetcher import fetch_plotly_from_url
 from ..services.flow_parser import parse_artifact_flow
@@ -105,8 +106,10 @@ async def chat(req: ChatRequest):
             )
         )
 
-    # 4b. Process plotly URLs (MCP resource links in assistant text)
-    plotly_urls = extract_plotly_urls(assistant_text)
+    # 4b. Process plotly URLs (MCP resource links from tool outputs AND assistant text)
+    resource_link_urls = extract_resource_links_from_events(events)
+    text_urls = extract_plotly_urls(assistant_text)
+    plotly_urls = list(dict.fromkeys(resource_link_urls + text_urls))  # dedupe, preserve order
     for url in plotly_urls:
         try:
             fetched = await fetch_plotly_from_url(url)

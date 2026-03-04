@@ -148,11 +148,13 @@ def line_plot(
     }
 
     description = f"선 그래프(Line Plot)입니다. {meta['n_lines']}개의 선을 표시했습니다. 전반적인 추세: {dominant_trend}"
-    result = {"type": "plotly", "title": request.title, "fig": fig.to_dict(), "meta": meta}
+    chart_title = request.title or "Line Plot"
+    result = {"type": "plotly", "title": chart_title, "fig": fig.to_dict(), "meta": meta}
 
     job_id = make_job_id()
     return save_outputs_and_build_response(
         job_id=job_id,
+        title=chart_title,
         payloads={"json": result},
         description=description,
     )

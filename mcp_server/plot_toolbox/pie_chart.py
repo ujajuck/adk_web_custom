@@ -161,6 +161,7 @@ def pie_chart(
     job_id = make_job_id()
     return save_outputs_and_build_response(
         job_id=job_id,
+        title=chart_title,
         payloads={"json": result},
         description=description,
     )

@@ -146,3 +146,50 @@ def extract_plotly_urls(text: str) -> list[str]:
     if not text:
         return []
     return _PLOTLY_URL_PATTERN.findall(text)
+
+
+def extract_resource_links_from_events(events: Any) -> list[str]:
+    """Extract resource_link URIs from tool outputs in ADK events.
+
+    Looks for outputs with type="resource_link" and uri containing .json
+    """
+    if not isinstance(events, list):
+        return []
+
+    uris: list[str] = []
+    visited: set[int] = set()
+
+    def _find_links(node: Any) -> None:
+        if node is None or not isinstance(node, (dict, list)):
+            return
+        nid = id(node)
+        if nid in visited:
+            return
+        visited.add(nid)
+
+        if isinstance(node, dict):
+            # Check if this is a resource_link output
+            if node.get("type") == "resource_link":
+                uri = node.get("uri", "")
+                if isinstance(uri, str) and uri.endswith(".json"):
+                    uris.append(uri)
+                return
+
+            # Check outputs array
+            outputs = node.get("outputs")
+            if isinstance(outputs, list):
+                for out in outputs:
+                    _find_links(out)
+
+            # Recurse into dict values
+            for v in node.values():
+                _find_links(v)
+
+        elif isinstance(node, list):
+            for item in node:
+                _find_links(item)
+
+    for ev in events:
+        _find_links(ev)
+
+    return uris
