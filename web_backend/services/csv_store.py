@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,26 @@ from typing import Any
 import pandas as pd
 
 from ..config import settings
+
+log = logging.getLogger(__name__)
+
+# 한국어 CSV 파일에서 자주 사용되는 인코딩 목록 (우선순위 순)
+_ENCODINGS = ["utf-8", "cp949", "euc-kr", "utf-8-sig", "latin1"]
+
+
+def _read_csv_with_encoding(path: Path) -> pd.DataFrame:
+    """여러 인코딩을 시도하여 CSV 파일을 읽습니다."""
+    last_error: Exception | None = None
+    for enc in _ENCODINGS:
+        try:
+            df = pd.read_csv(path, encoding=enc)
+            log.debug("CSV loaded with encoding: %s", enc)
+            return df
+        except (UnicodeDecodeError, UnicodeError) as e:
+            last_error = e
+            continue
+    # 모든 인코딩 실패 시 마지막 에러 raise
+    raise last_error or ValueError(f"Cannot decode CSV: {path}")
 
 
 class CsvStore:
@@ -30,7 +51,7 @@ class CsvStore:
         """Read a CSV from *source_path*, cache the DataFrame, and copy the
         file into the local data directory for later download."""
         source = Path(source_path)
-        df = pd.read_csv(source)
+        df = _read_csv_with_encoding(source)
 
         dest = Path(settings.DATA_DIR) / file_id
         dest.mkdir(parents=True, exist_ok=True)
@@ -52,7 +73,7 @@ class CsvStore:
         dest = Path(settings.DATA_DIR) / file_id
         dest.mkdir(parents=True, exist_ok=True)
         dest_file = dest / filename
-        df.to_csv(dest_file, index=False)
+        df.to_csv(dest_file, index=False, encoding="utf-8-sig")
 
         self._frames[file_id] = df
         self._filenames[file_id] = filename

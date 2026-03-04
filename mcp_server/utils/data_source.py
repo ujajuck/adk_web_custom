@@ -300,6 +300,23 @@ source_type 필드로 구분된다:
 # Helper Functions
 # =============================================================================
 
+# 한국어 CSV 파일에서 자주 사용되는 인코딩 목록 (우선순위 순)
+_ENCODINGS = ["utf-8", "cp949", "euc-kr", "utf-8-sig", "latin1"]
+
+
+def _read_csv_with_encoding(path: str) -> pd.DataFrame:
+    """여러 인코딩을 시도하여 CSV 파일을 읽습니다."""
+    last_error: Exception | None = None
+    for enc in _ENCODINGS:
+        try:
+            return pd.read_csv(path, encoding=enc)
+        except (UnicodeDecodeError, UnicodeError) as e:
+            last_error = e
+            continue
+    # 모든 인코딩 실패 시 마지막 에러 raise
+    raise last_error or ValueError(f"Cannot decode CSV: {path}")
+
+
 def _read_data_file(path: str) -> pd.DataFrame:
     """파일 경로에서 DataFrame 로드.
 
@@ -308,7 +325,7 @@ def _read_data_file(path: str) -> pd.DataFrame:
     lower = path.lower()
 
     if lower.endswith(".csv"):
-        return pd.read_csv(path)
+        return _read_csv_with_encoding(path)
 
     if lower.endswith(".json"):
         with open(path, "r", encoding="utf-8") as f:

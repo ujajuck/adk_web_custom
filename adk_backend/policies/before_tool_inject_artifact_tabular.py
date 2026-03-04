@@ -10,6 +10,9 @@ import pandas as pd
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
 
+# 한국어 CSV 파일에서 자주 사용되는 인코딩 목록 (우선순위 순)
+_ENCODINGS = ["utf-8", "cp949", "euc-kr", "utf-8-sig", "latin1"]
+
 
 def _extract_bytes_from_part(part: Any) -> Optional[bytes]:
     """
@@ -139,8 +142,20 @@ def _parse_csv_with_options(raw_bytes: bytes, args: Dict[str, Any]) -> pd.DataFr
     if sep is not None and not isinstance(sep, str):
         sep = None
 
-    # CSV 파싱
-    df = pd.read_csv(io.BytesIO(raw_bytes), usecols=columns, sep=sep)
+    # CSV 파싱 - 여러 인코딩 시도
+    df = None
+    last_error = None
+    for enc in _ENCODINGS:
+        try:
+            df = pd.read_csv(io.BytesIO(raw_bytes), usecols=columns, sep=sep, encoding=enc)
+            break
+        except (UnicodeDecodeError, UnicodeError) as e:
+            last_error = e
+            continue
+
+    if df is None:
+        raise last_error or ValueError("CSV 디코딩 실패")
+
     if max_rows > 0 and len(df) > max_rows:
         df = df.head(max_rows)
 
