@@ -4,6 +4,10 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Save, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8080";
+
 // Types for flow data
 interface FlowNode {
   id: string;
@@ -130,13 +134,11 @@ function calculateLayout(
 
 interface FlowGraphWidgetProps {
   sessionId: string;
-  backendUrl?: string;
   checkedWidgets?: string[]; // 체크된 위젯 title 목록
 }
 
 export default function FlowGraphWidget({
   sessionId,
-  backendUrl = "http://localhost:8080",
   checkedWidgets = [],
 }: FlowGraphWidgetProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -151,7 +153,7 @@ export default function FlowGraphWidget({
   // Fetch flow data
   const fetchFlow = useCallback(async () => {
     try {
-      const res = await fetch(`${backendUrl}/api/flow/${sessionId}`);
+      const res = await fetch(`${API_URL}/api/flow/${sessionId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setFlowData(data);
@@ -161,7 +163,7 @@ export default function FlowGraphWidget({
     } finally {
       setLoading(false);
     }
-  }, [sessionId, backendUrl]);
+  }, [sessionId]);
 
   useEffect(() => {
     fetchFlow();
