@@ -147,28 +147,58 @@ export default function ChatPanel() {
           return;
         }
 
-        // CSV files
-        for (const csv of json?.csv_files ?? []) {
-          addCsvFileWindow(
-            `${csv.filename} (${csv.total_rows} rows)`,
-            csv.file_id,
-          );
-          pushMsg(
-            "assistant",
-            `CSV를 워크스페이스에 열었어요: ${csv.filename} (${csv.total_rows}행, ${csv.total_cols}열)`,
-          );
-        }
+        // 새 응답 포맷: { status, outputs: [{ type, uri, mime_type }], text?, tool_name? }
+        const outputs: Array<{ type: string; uri: string; mime_type?: string }> =
+          json?.outputs ?? [];
+        const toolName: string = json?.tool_name ?? "";
+        const isPlottingTool = toolName.startsWith("plotting");
 
-        // Plotly figures
-        for (const pf of json?.plotly_figs ?? []) {
-          addPlotlyWindow(pf.title, pf.fig);
-          pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${pf.title}`);
+        for (const out of outputs) {
+          if (out.type !== "resource_link") continue;
+
+          const uri = out.uri ?? "";
+          const mime = out.mime_type ?? "";
+
+          // CSV 파일
+          if (uri.endsWith(".csv") || mime === "text/csv") {
+            const filename = uri.split("/").pop() ?? "data.csv";
+            // URI에서 file_id 추출 (예: /files/{file_id}/... 또는 그냥 URI 사용)
+            const fileId = uri;
+            addCsvFileWindow(filename, fileId);
+            pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${filename}`);
+            continue;
+          }
+
+          // JSON 파일 - plotting 툴인 경우에만 Plotly로 처리
+          if (uri.endsWith(".json") || mime === "application/json") {
+            if (isPlottingTool) {
+              // Plotly 데이터 fetch
+              try {
+                const figRes = await fetch(`${API_URL}${uri.startsWith("/") ? "" : "/"}${uri}`);
+                if (figRes.ok) {
+                  const fig = await figRes.json();
+                  const title = uri.split("/").pop()?.replace(".json", "") ?? "Chart";
+                  addPlotlyWindow(title, fig);
+                  pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${title}`);
+                }
+              } catch (e) {
+                console.error("[ChatPanel] Failed to fetch plotly data:", e);
+              }
+            }
+            // plotting이 아닌 경우 .json은 무시 (위젯으로 표시 안함)
+            continue;
+          }
+
+          // 이미지 등 다른 리소스는 메시지로만 안내
+          if (mime.startsWith("image/")) {
+            pushMsg("assistant", `이미지 생성됨: ${uri}`);
+          }
         }
 
         // Assistant text
         if (json?.text) {
           pushMsg("assistant", json.text);
-        } else if (!json?.csv_files?.length && !json?.plotly_figs?.length) {
+        } else if (outputs.length === 0) {
           pushMsg(
             "assistant",
             `응답 없음\n${JSON.stringify(json, null, 2)}`,
