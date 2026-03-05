@@ -196,7 +196,7 @@ export default function FlowGraphWidget({
 
     // 노드의 label이 체크된 위젯과 일치하면 포함
     flowData.nodes.forEach((node) => {
-      if (checkedWidgets.some((w) => node.label.includes(w))) {
+      if (node.label && checkedWidgets.some((w) => node.label?.includes(w))) {
         relevantNodeIds.add(node.id);
       }
     });

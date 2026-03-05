@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useCallback, useEffect, useState, useMemo, memo } from "react";
+import { Download, ChevronLeft, ChevronRight, Loader2, Columns } from "lucide-react";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
@@ -20,12 +18,43 @@ type CsvPage = {
 };
 
 const PAGE_SIZE = 50;
+const MAX_VISIBLE_COLS = 20; // 기본 표시 열 수
+
+// 메모이즈된 테이블 행 컴포넌트
+const TableRow = memo(function TableRow({
+  row,
+  columns,
+  rowIndex,
+  offset,
+}: {
+  row: Record<string, any>;
+  columns: string[];
+  rowIndex: number;
+  offset: number;
+}) {
+  return (
+    <tr className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+      <td className="text-center text-[11px] text-gray-400 px-2 py-1 border-b border-r border-gray-100">
+        {offset + rowIndex + 1}
+      </td>
+      {columns.map((c) => (
+        <td
+          key={c}
+          className="px-3 py-1 border-b border-r border-gray-100 whitespace-nowrap text-gray-800 max-w-[200px] truncate"
+        >
+          {row?.[c] != null ? String(row[c]) : ""}
+        </td>
+      ))}
+    </tr>
+  );
+});
 
 export default function CsvFileWidget({ fileId }: { fileId: string }) {
   const [page, setPage] = useState<CsvPage | null>(null);
   const [offset, setOffset] = useState(0);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showAllCols, setShowAllCols] = useState(false);
 
   const fetchPage = useCallback(
     async (off: number) => {
@@ -64,6 +93,17 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
   const totalPages = page ? Math.ceil(page.total_rows / PAGE_SIZE) : 0;
   const currentPage = page ? Math.floor(offset / PAGE_SIZE) + 1 : 0;
 
+  // 표시할 열 (많으면 제한)
+  const visibleColumns = useMemo(() => {
+    if (!page) return [];
+    if (showAllCols || page.columns.length <= MAX_VISIBLE_COLS) {
+      return page.columns;
+    }
+    return page.columns.slice(0, MAX_VISIBLE_COLS);
+  }, [page, showAllCols]);
+
+  const hasHiddenCols = page && page.columns.length > MAX_VISIBLE_COLS && !showAllCols;
+
   if (err)
     return <div className="p-3 text-red-500 text-sm">{err}</div>;
 
@@ -82,30 +122,50 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
     <div className="flex flex-col h-full p-3 gap-2">
       {/* 상단 바 */}
       <div className="flex items-center justify-between gap-3 shrink-0">
-        <button
-          onClick={downloadCsv}
-          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-gray-300 hover:bg-gray-50 transition-colors"
-        >
-          <Download size={13} />
-          다운로드
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadCsv}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            <Download size={13} />
+            다운로드
+          </button>
+          {hasHiddenCols && (
+            <button
+              onClick={() => setShowAllCols(true)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-blue-300 text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              <Columns size={13} />
+              전체 {page.columns.length}열 보기
+            </button>
+          )}
+          {showAllCols && page.columns.length > MAX_VISIBLE_COLS && (
+            <button
+              onClick={() => setShowAllCols(false)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-gray-300 hover:bg-gray-50 transition-colors"
+            >
+              <Columns size={13} />
+              {MAX_VISIBLE_COLS}열만 보기
+            </button>
+          )}
+        </div>
         <span className="text-xs text-gray-500 bg-gray-100 rounded px-2 py-1">
-          {page.total_rows}행 · {page.columns.length}열
+          {page.total_rows}행 · {visibleColumns.length}/{page.columns.length}열
         </span>
       </div>
 
       {/* 테이블 - 스크롤 하나만 */}
-      <div className="flex-1 rounded border border-gray-200 overflow-auto min-h-0">
-        <table className="text-[13px] border-collapse" style={{ minWidth: "100%" }}>
+      <div className="flex-1 rounded border border-gray-200 overflow-auto min-h-0" style={{ contain: "strict" }}>
+        <table className="text-[13px] border-collapse" style={{ minWidth: "100%", tableLayout: "fixed" }}>
           <thead className="sticky top-0 bg-gray-50 z-[1]">
             <tr>
-              <th className="text-center text-[11px] text-gray-400 font-normal px-2 py-1.5 border-b border-r border-gray-200 min-w-[36px]">
+              <th className="text-center text-[11px] text-gray-400 font-normal px-2 py-1.5 border-b border-r border-gray-200 w-[50px]">
                 #
               </th>
-              {page.columns.map((c) => (
+              {visibleColumns.map((c) => (
                 <th
                   key={c}
-                  className="text-left text-[12px] font-medium text-gray-700 px-3 py-1.5 border-b border-r border-gray-200 whitespace-nowrap"
+                  className="text-left text-[12px] font-medium text-gray-700 px-3 py-1.5 border-b border-r border-gray-200 whitespace-nowrap truncate w-[120px]"
                 >
                   {c}
                 </th>
@@ -114,22 +174,13 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
           </thead>
           <tbody>
             {page.rows.map((r, i) => (
-              <tr
-                key={i}
-                className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-              >
-                <td className="text-center text-[11px] text-gray-400 px-2 py-1 border-b border-r border-gray-100">
-                  {offset + i + 1}
-                </td>
-                {page.columns.map((c) => (
-                  <td
-                    key={c}
-                    className="px-3 py-1 border-b border-r border-gray-100 whitespace-nowrap text-gray-800"
-                  >
-                    {r?.[c] != null ? String(r[c]) : ""}
-                  </td>
-                ))}
-              </tr>
+              <TableRow
+                key={`${offset}-${i}`}
+                row={r}
+                columns={visibleColumns}
+                rowIndex={i}
+                offset={offset}
+              />
             ))}
           </tbody>
         </table>
