@@ -113,7 +113,11 @@ async def chat(req: ChatRequest):
         # JSON 파일 → PlotlyFigMeta (Plotly figure로 간주)
         elif filename.lower().endswith(".json"):
             try:
-                fig_data = json.loads(artifact_path.read_text(encoding="utf-8"))
+                raw_content = artifact_path.read_text(encoding="utf-8")
+                fig_data = json.loads(raw_content)
+                # pio.to_json()가 문자열을 반환하므로 이중 인코딩 처리
+                if isinstance(fig_data, str):
+                    fig_data = json.loads(fig_data)
                 fig_id = f"{req.session_id}__fig__{uuid.uuid4().hex[:8]}"
                 title = filename.replace(".json", "")
                 plotly_store.store(fig_id, title, fig_data)
