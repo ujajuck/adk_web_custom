@@ -46,9 +46,18 @@ class PlotlyFigMeta(BaseModel):
     fig: dict[str, Any]
 
 
+class OutputItem(BaseModel):
+    type: str
+    uri: str
+    mime_type: str = ""
+
+
 class ChatResponse(BaseModel):
     job_id: str
+    status: str = "success"
     text: str
+    outputs: list[OutputItem] = Field(default_factory=list)
+    # Legacy fields (deprecated)
     csv_files: list[CsvFileMeta] = Field(default_factory=list)
     plotly_figs: list[PlotlyFigMeta] = Field(default_factory=list)
     raw_events: Any | None = None

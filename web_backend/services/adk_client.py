@@ -4,9 +4,9 @@ ADK 버전별 호환성 처리
 ─────────────────────
 * 세션 생성: 409 Conflict → 이미 존재하는 세션이므로 정상 처리
 * /run 응답 형식
-  - 구버전 ADK: JSON 배열  [event, event, ...]
-  - 신버전 ADK: NDJSON 스트림 / SSE (data: {json}\\n\\n)
-  두 형식 모두 파싱해서 list[dict] 로 반환한다.
+  - 신형식: {"status": "success"|"error", "outputs": [...]}
+  - 구형식: JSON 배열 [event, event, ...] 또는 NDJSON/SSE
+  → 모두 {"status": ..., "outputs": [], "events": [...]} 형태로 정규화해서 반환
 """
 
 from __future__ import annotations
@@ -54,27 +54,39 @@ async def create_adk_session(
         return body
 
 
-def _parse_run_response(content_type: str, text: str) -> list[dict[str, Any]]:
-    """ADK /run 응답을 list[dict] 로 파싱한다.
+def _parse_run_response(content_type: str, text: str) -> dict[str, Any]:
+    """ADK /run 응답을 파싱한다.
 
-    지원 형식:
-    1. JSON 배열  – 구버전 ADK (content-type: application/json)
-    2. NDJSON     – 신버전 ADK (content-type: application/x-ndjson)
-    3. SSE        – 신버전 ADK (content-type: text/event-stream)
-       각 줄이 "data: {json}" 형식
+    신형식 (권장):
+    {
+      "status": "success"|"error",
+      "outputs": [{"type": "resource_link", "uri": "...", "mime_type": "..."}]
+    }
+
+    구형식 (하위 호환):
+    JSON 배열 [event, event, ...] → {"status": "success", "outputs": [], "events": [...]} 로 변환
     """
     stripped = text.strip()
 
-    # ── 1. JSON 배열 ──────────────────────────────────────────────────────
-    if stripped.startswith("["):
+    # ── 1. 신형식 { status, outputs } ─────────────────────────────────────
+    if stripped.startswith("{"):
         try:
             result = json.loads(stripped)
-            if isinstance(result, list):
+            if isinstance(result, dict) and "status" in result:
                 return result
         except json.JSONDecodeError:
             pass
 
-    # ── 2. NDJSON / SSE 줄별 파싱 ─────────────────────────────────────────
+    # ── 2. 구형식 JSON 배열 → 신형식으로 변환 ─────────────────────────────
+    if stripped.startswith("["):
+        try:
+            events = json.loads(stripped)
+            if isinstance(events, list):
+                return {"status": "success", "outputs": [], "events": events}
+        except json.JSONDecodeError:
+            pass
+
+    # ── 3. NDJSON / SSE 줄별 파싱 (구형식) ────────────────────────────────
     events: list[dict[str, Any]] = []
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -88,21 +100,32 @@ def _parse_run_response(content_type: str, text: str) -> list[dict[str, Any]]:
         try:
             obj = json.loads(line)
             if isinstance(obj, dict):
+                # 신형식이 SSE로 왔을 수 있음
+                if "status" in obj and "outputs" in obj:
+                    return obj
                 events.append(obj)
             elif isinstance(obj, list):
                 events.extend(obj)
         except json.JSONDecodeError:
             log.debug("Skipping non-JSON line from ADK /run: %.120s", line)
 
-    return events
+    return {"status": "success", "outputs": [], "events": events}
 
 
 async def send_message_to_adk(
     user_id: str,
     session_id: str,
     message: str,
-) -> list[dict[str, Any]]:
-    """POST /run on the ADK backend and return the list of events."""
+) -> dict[str, Any]:
+    """POST /run on the ADK backend and return the response dict.
+
+    반환 형식:
+    {
+      "status": "success"|"error",
+      "outputs": [...],      # 신형식
+      "events": [...]        # 구형식 (하위 호환)
+    }
+    """
     base = settings.ADK_BASE_URL.rstrip("/")
     app = settings.ADK_APP_NAME
 

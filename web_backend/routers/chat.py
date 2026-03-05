@@ -57,11 +57,23 @@ async def chat(req: ChatRequest):
 
     # 1. Forward to ADK
     try:
-        events = await send_message_to_adk(req.user_id, req.session_id, req.message)
-        log.debug("ADK returned %d events", len(events))
+        adk_result = await send_message_to_adk(req.user_id, req.session_id, req.message)
+        log.debug("ADK returned status=%s", adk_result.get("status"))
     except Exception as exc:
         log.error("ADK request failed: %s", exc, exc_info=True)
         raise HTTPException(502, detail=f"ADK request failed: {exc}")
+
+    # Handle error status from ADK
+    if adk_result.get("status") == "error":
+        error_msg = adk_result.get("error", "Unknown ADK error")
+        log.warning("ADK returned error: %s", error_msg)
+        raise HTTPException(502, detail=f"ADK error: {error_msg}")
+
+    # Extract events (for backward compatibility parsers)
+    events = adk_result.get("events", [])
+    # Extract outputs (new format: resource_link items)
+    outputs = adk_result.get("outputs", [])
+    log.debug("ADK returned %d events, %d outputs", len(events), len(outputs))
 
     # 2. Parse response
     assistant_text = extract_assistant_text(events)
@@ -109,7 +121,12 @@ async def chat(req: ChatRequest):
     # 4b. Process plotly URLs (MCP resource links from tool outputs AND assistant text)
     resource_link_urls = extract_resource_links_from_events(events)
     text_urls = extract_plotly_urls(assistant_text)
-    plotly_urls = list(dict.fromkeys(resource_link_urls + text_urls))  # dedupe, preserve order
+    # Also extract URIs from new "outputs" format
+    output_urls = [
+        o.get("uri") for o in outputs
+        if isinstance(o, dict) and o.get("type") == "resource_link" and o.get("uri")
+    ]
+    plotly_urls = list(dict.fromkeys(resource_link_urls + output_urls + text_urls))  # dedupe, preserve order
     for url in plotly_urls:
         try:
             fetched = await fetch_plotly_from_url(url)
