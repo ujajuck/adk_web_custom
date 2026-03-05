@@ -80,15 +80,21 @@ async def chat(req: ChatRequest):
     artifact_delta = extract_artifact_delta(events)
     plotly_result = extract_plotly_fig(events)
 
-    # 3. Process CSV artifacts
+    # 3. Process artifacts by type (.csv → CsvFileMeta, .json → PlotlyFigMeta)
     csv_metas: list[CsvFileMeta] = []
+    plotly_metas: list[PlotlyFigMeta] = []
     for filename, version in artifact_delta.items():
         file_id = f"{req.session_id}__{filename}__v{version}"
         artifact_path = _resolve_artifact_path(
             req.user_id, req.session_id, filename, version
         )
 
-        if artifact_path.exists():
+        if not artifact_path.exists():
+            log.warning("Artifact path does not exist: %s", artifact_path)
+            continue
+
+        # CSV 파일 → CsvFileMeta
+        if filename.lower().endswith(".csv"):
             try:
                 df = csv_store.store_from_path(file_id, artifact_path, filename)
                 csv_metas.append(
@@ -100,13 +106,29 @@ async def chat(req: ChatRequest):
                         columns=list(df.columns),
                     )
                 )
+                log.info("Loaded CSV artifact: %s (%d rows)", filename, len(df))
             except Exception as exc:
                 log.warning("Failed to load CSV %s: %s", filename, exc)
-        else:
-            log.warning("Artifact path does not exist: %s", artifact_path)
+
+        # JSON 파일 → PlotlyFigMeta (Plotly figure로 간주)
+        elif filename.lower().endswith(".json"):
+            try:
+                fig_data = json.loads(artifact_path.read_text(encoding="utf-8"))
+                fig_id = f"{req.session_id}__fig__{uuid.uuid4().hex[:8]}"
+                title = filename.replace(".json", "")
+                plotly_store.store(fig_id, title, fig_data)
+                plotly_metas.append(
+                    PlotlyFigMeta(
+                        fig_id=fig_id,
+                        title=title,
+                        fig=fig_data,
+                    )
+                )
+                log.info("Loaded Plotly figure from artifact: %s", filename)
+            except Exception as exc:
+                log.warning("Failed to load JSON artifact %s: %s", filename, exc)
 
     # 4. Process plotly figure (embedded in events)
-    plotly_metas: list[PlotlyFigMeta] = []
     if plotly_result:
         fig_id = f"{req.session_id}__fig__{uuid.uuid4().hex[:8]}"
         plotly_store.store(fig_id, plotly_result["title"], plotly_result["fig"])

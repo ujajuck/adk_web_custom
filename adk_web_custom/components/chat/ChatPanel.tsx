@@ -195,10 +195,31 @@ export default function ChatPanel() {
           }
         }
 
+        // 백엔드에서 처리된 csv_files 처리
+        const csvFiles: Array<{ file_id: string; filename: string }> =
+          json?.csv_files ?? [];
+        for (const csv of csvFiles) {
+          if (csv.file_id && csv.filename) {
+            addCsvFileWindow(csv.filename, csv.file_id);
+            pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${csv.filename}`);
+          }
+        }
+
+        // 백엔드에서 처리된 plotly_figs 처리 (fig 데이터 포함됨)
+        const plotlyFigs: Array<{ fig_id: string; title: string; fig: any }> =
+          json?.plotly_figs ?? [];
+        for (const pf of plotlyFigs) {
+          if (pf.fig && pf.title) {
+            addPlotlyWindow(pf.title, pf.fig);
+            pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${pf.title}`);
+          }
+        }
+
         // Assistant text
+        const hasWidgets = csvFiles.length > 0 || plotlyFigs.length > 0 || outputs.length > 0;
         if (json?.text) {
           pushMsg("assistant", json.text);
-        } else if (outputs.length === 0) {
+        } else if (!hasWidgets) {
           pushMsg(
             "assistant",
             `응답 없음\n${JSON.stringify(json, null, 2)}`,
