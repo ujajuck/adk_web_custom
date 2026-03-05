@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..config import settings
 from ..database import get_db
-from ..models import ChatRequest, ChatResponse, CsvFileMeta, PlotlyFigMeta
+from ..models import ChatRequest, ChatResponse, CsvFileMeta, OutputItem, PlotlyFigMeta
 from ..services.adk_client import send_message_to_adk
 from ..services.csv_store import csv_store
 from ..services.plotly_store import plotly_store
@@ -179,9 +179,22 @@ async def chat(req: ChatRequest):
     finally:
         await db.close()
 
+    # Build output items from ADK outputs
+    output_items = [
+        OutputItem(
+            type=o.get("type", ""),
+            uri=o.get("uri", ""),
+            mime_type=o.get("mime_type", ""),
+        )
+        for o in outputs
+        if isinstance(o, dict) and o.get("type") and o.get("uri")
+    ]
+
     return ChatResponse(
         job_id=job_id,
+        status="success",
         text=assistant_text,
+        outputs=output_items,
         csv_files=csv_metas,
         plotly_figs=plotly_metas,
     )
