@@ -7,6 +7,8 @@ import {
   useCallback,
 } from "react";
 import { Send, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import type { Msg } from "@/components/chat/adkTypes";
@@ -159,35 +161,9 @@ export default function ChatPanel() {
           const uri = out.uri ?? "";
           const mime = out.mime_type ?? "";
 
-          // CSV 파일
-          if (uri.endsWith(".csv") || mime === "text/csv") {
-            const filename = uri.split("/").pop() ?? "data.csv";
-            // URI에서 file_id 추출 (예: /files/{file_id}/... 또는 그냥 URI 사용)
-            const fileId = uri;
-            addCsvFileWindow(filename, fileId);
-            pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${filename}`);
-            continue;
-          }
-
-          // JSON 파일 - plotting 툴인 경우에만 Plotly로 처리
-          if (uri.endsWith(".json") || mime === "application/json") {
-            if (isPlottingTool) {
-              // Plotly 데이터 fetch
-              try {
-                const figRes = await fetch(`${API_URL}${uri.startsWith("/") ? "" : "/"}${uri}`);
-                if (figRes.ok) {
-                  const fig = await figRes.json();
-                  const title = uri.split("/").pop()?.replace(".json", "") ?? "Chart";
-                  addPlotlyWindow(title, fig);
-                  pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${title}`);
-                }
-              } catch (e) {
-                console.error("[ChatPanel] Failed to fetch plotly data:", e);
-              }
-            }
-            // plotting이 아닌 경우 .json은 무시 (위젯으로 표시 안함)
-            continue;
-          }
+          // CSV/JSON은 백엔드에서 처리 후 csv_files/plotly_figs로 전달되므로 여기서 스킵
+          if (uri.endsWith(".csv") || mime === "text/csv") continue;
+          if (uri.endsWith(".json") || mime === "application/json") continue;
 
           // 이미지 등 다른 리소스는 메시지로만 안내
           if (mime.startsWith("image/")) {
@@ -331,13 +307,22 @@ export default function ChatPanel() {
             >
               <div
                 className={cn(
-                  "max-w-[80%] px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
+                  "max-w-[80%] px-4 py-2.5 text-sm leading-relaxed",
                   isUser
-                    ? "bg-blue-500 text-white rounded-2xl rounded-br-md shadow-md"
+                    ? "bg-blue-500 text-white rounded-2xl rounded-br-md shadow-md whitespace-pre-wrap"
                     : "bg-white text-gray-800 rounded-2xl rounded-bl-md shadow-sm border border-gray-200",
                 )}
               >
-                {m.text}
+                {isUser ? (
+                  m.text
+                ) : (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded"
+                  >
+                    {m.text}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           );

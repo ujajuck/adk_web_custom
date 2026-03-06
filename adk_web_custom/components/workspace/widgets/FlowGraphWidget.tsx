@@ -32,46 +32,60 @@ interface FlowData {
   edges: FlowEdge[];
 }
 
-// Layout calculation - simple left-to-right flow
-interface LayoutNode extends FlowNode {
+// Layout node with position and type info
+interface LayoutNode {
+  id: string;
+  label: string;
   x: number;
   y: number;
   width: number;
   height: number;
-  isWidget: boolean; // true = 원형(위젯), false = 상자(아티팩트)
+  isTool: boolean; // true = 사각형(tool), false = 원형(artifact)
+  originalNode?: FlowNode;
+  originalEdge?: FlowEdge;
+}
+
+interface LayoutEdge {
+  source: string;
+  target: string;
 }
 
 function calculateLayout(
   nodes: FlowNode[],
   edges: FlowEdge[],
   containerWidth: number,
-): LayoutNode[] {
-  if (nodes.length === 0) return [];
+): { layoutNodes: LayoutNode[]; layoutEdges: LayoutEdge[] } {
+  if (nodes.length === 0) return { layoutNodes: [], layoutEdges: [] };
 
-  const nodeWidth = 120;
-  const nodeHeight = 50;
-  const horizontalGap = 80;
-  const verticalGap = 30;
+  const nodeWidth = 100;
+  const nodeHeight = 40;
+  const horizontalGap = 60;
+  const verticalGap = 25;
 
-  // Build adjacency list
-  const outgoing = new Map<string, string[]>();
-  const incoming = new Map<string, string[]>();
+  // 1. 노드별 incoming/outgoing 엣지 계산
+  const nodeOutEdges = new Map<string, FlowEdge[]>();
+  const nodeInEdges = new Map<string, FlowEdge[]>();
 
   edges.forEach((edge) => {
-    if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
-    outgoing.get(edge.source)!.push(edge.target);
+    if (!nodeOutEdges.has(edge.source)) nodeOutEdges.set(edge.source, []);
+    nodeOutEdges.get(edge.source)!.push(edge);
 
-    if (!incoming.has(edge.target)) incoming.set(edge.target, []);
-    incoming.get(edge.target)!.push(edge.source);
+    if (!nodeInEdges.has(edge.target)) nodeInEdges.set(edge.target, []);
+    nodeInEdges.get(edge.target)!.push(edge);
   });
 
-  // Find root nodes (no incoming edges)
+  // 2. 레벨 계산 (artifact -> tool -> artifact -> tool -> ...)
+  // 각 엣지(tool)를 노드로 변환하여 배치
+  const layoutNodes: LayoutNode[] = [];
+  const layoutEdges: LayoutEdge[] = [];
+
+  // 루트 노드 찾기 (incoming 엣지 없는 노드)
   const roots = nodes.filter(
-    (n) => !incoming.has(n.id) || incoming.get(n.id)!.length === 0,
+    (n) => !nodeInEdges.has(n.id) || nodeInEdges.get(n.id)!.length === 0,
   );
 
-  // BFS to assign levels
-  const levels = new Map<string, number>();
+  // BFS로 레벨 할당
+  const nodeLevels = new Map<string, number>();
   const queue = [...roots.map((r) => ({ id: r.id, level: 0 }))];
   const visited = new Set<string>();
 
@@ -79,57 +93,70 @@ function calculateLayout(
     const { id, level } = queue.shift()!;
     if (visited.has(id)) continue;
     visited.add(id);
-    levels.set(id, Math.max(levels.get(id) || 0, level));
+    nodeLevels.set(id, level);
 
-    const children = outgoing.get(id) || [];
-    children.forEach((childId) => {
-      if (!visited.has(childId)) {
-        queue.push({ id: childId, level: level + 1 });
+    const outEdges = nodeOutEdges.get(id) || [];
+    outEdges.forEach((edge) => {
+      if (!visited.has(edge.target)) {
+        queue.push({ id: edge.target, level: level + 2 }); // +2 to leave room for tool node
       }
     });
   }
 
-  // Handle disconnected nodes
+  // 미방문 노드 처리
   nodes.forEach((n) => {
-    if (!levels.has(n.id)) {
-      levels.set(n.id, 0);
+    if (!nodeLevels.has(n.id)) {
+      nodeLevels.set(n.id, 0);
     }
   });
 
-  // Group by level
-  const levelGroups = new Map<number, FlowNode[]>();
-  nodes.forEach((n) => {
-    const level = levels.get(n.id) || 0;
-    if (!levelGroups.has(level)) levelGroups.set(level, []);
-    levelGroups.get(level)!.push(n);
-  });
+  // 3. 레이아웃 생성: artifact 노드 (원형)
+  const levelCounts = new Map<number, number>();
+  nodes.forEach((node) => {
+    const level = nodeLevels.get(node.id) || 0;
+    const idx = levelCounts.get(level) || 0;
+    levelCounts.set(level, idx + 1);
 
-  // Calculate positions
-  const layoutNodes: LayoutNode[] = [];
-
-  levelGroups.forEach((group, level) => {
-    let startY = 60;
-
-    group.forEach((node, idx) => {
-      // 위젯 vs 아티팩트 구분
-      // 아티팩트: input 타입이거나 .csv/.json 파일명
-      const isArtifact =
-        node.node_type === "input" ||
-        /\.(csv|json|xlsx|parquet)$/i.test(node.file_name || "") ||
-        /\.(csv|json|xlsx|parquet)$/i.test(node.artifact_name || "");
-
-      layoutNodes.push({
-        ...node,
-        x: 40 + level * (nodeWidth + horizontalGap),
-        y: startY + idx * (nodeHeight + verticalGap),
-        width: nodeWidth,
-        height: nodeHeight,
-        isWidget: !isArtifact,
-      });
+    layoutNodes.push({
+      id: node.id,
+      label: node.label,
+      x: 40 + level * (nodeWidth + horizontalGap),
+      y: 60 + idx * (nodeHeight + verticalGap),
+      width: nodeWidth,
+      height: nodeHeight,
+      isTool: false,
+      originalNode: node,
     });
   });
 
-  return layoutNodes;
+  // 4. 엣지를 tool 노드(사각형)로 변환하고 연결
+  edges.forEach((edge) => {
+    const sourceLevel = nodeLevels.get(edge.source) || 0;
+    const toolLevel = sourceLevel + 1;
+
+    const idx = levelCounts.get(toolLevel) || 0;
+    levelCounts.set(toolLevel, idx + 1);
+
+    const toolNodeId = `tool_${edge.id}`;
+    const toolLabel = edge.label || edge.tool_name || "tool";
+
+    layoutNodes.push({
+      id: toolNodeId,
+      label: toolLabel.length > 12 ? toolLabel.slice(0, 10) + ".." : toolLabel,
+      x: 40 + toolLevel * (nodeWidth + horizontalGap),
+      y: 60 + idx * (nodeHeight + verticalGap),
+      width: nodeWidth,
+      height: nodeHeight,
+      isTool: true,
+      originalEdge: edge,
+    });
+
+    // source -> tool, tool -> target
+    layoutEdges.push({ source: edge.source, target: toolNodeId });
+    layoutEdges.push({ source: toolNodeId, target: edge.target });
+  });
+
+  return { layoutNodes, layoutEdges };
 }
 
 interface FlowGraphWidgetProps {
@@ -148,6 +175,7 @@ export default function FlowGraphWidget({
   const [error, setError] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<LayoutNode | null>(null);
   const [layoutNodes, setLayoutNodes] = useState<LayoutNode[]>([]);
+  const [layoutEdges, setLayoutEdges] = useState<LayoutEdge[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Fetch flow data
@@ -224,8 +252,13 @@ export default function FlowGraphWidget({
   useEffect(() => {
     if (!filteredData || !containerRef.current) return;
     const width = containerRef.current.clientWidth;
-    const nodes = calculateLayout(filteredData.nodes, filteredData.edges, width);
+    const { layoutNodes: nodes, layoutEdges: edges } = calculateLayout(
+      filteredData.nodes,
+      filteredData.edges,
+      width,
+    );
     setLayoutNodes(nodes);
+    setLayoutEdges(edges);
   }, [filteredData]);
 
   // Draw the graph
@@ -247,8 +280,8 @@ export default function FlowGraphWidget({
     ctx.fillStyle = "#1a1a2e";
     ctx.fillRect(0, 0, rect.width, rect.height);
 
-    // Draw edges first
-    filteredData.edges.forEach((edge) => {
+    // Draw edges
+    layoutEdges.forEach((edge) => {
       const sourceNode = layoutNodes.find((n) => n.id === edge.source);
       const targetNode = layoutNodes.find((n) => n.id === edge.target);
 
@@ -258,7 +291,6 @@ export default function FlowGraphWidget({
         const endX = targetNode.x;
         const endY = targetNode.y + targetNode.height / 2;
 
-        // Draw bezier curve
         ctx.beginPath();
         ctx.strokeStyle = "#4a90d9";
         ctx.lineWidth = 2;
@@ -268,8 +300,8 @@ export default function FlowGraphWidget({
         ctx.bezierCurveTo(cpX, startY, cpX, endY, endX, endY);
         ctx.stroke();
 
-        // Draw arrow
-        const arrowSize = 8;
+        // Arrow
+        const arrowSize = 6;
         const angle = Math.atan2(endY - startY, endX - cpX);
         ctx.beginPath();
         ctx.fillStyle = "#4a90d9";
@@ -284,17 +316,6 @@ export default function FlowGraphWidget({
         );
         ctx.closePath();
         ctx.fill();
-
-        // Draw edge label (tool name)
-        if (edge.label) {
-          const labelX = (startX + endX) / 2;
-          const labelY = (startY + endY) / 2 - 8;
-
-          ctx.font = "11px system-ui";
-          ctx.fillStyle = "#8b9dc3";
-          ctx.textAlign = "center";
-          ctx.fillText(edge.label, labelX, labelY);
-        }
       }
     });
 
@@ -304,54 +325,35 @@ export default function FlowGraphWidget({
       const centerX = node.x + node.width / 2;
       const centerY = node.y + node.height / 2;
 
-      if (node.isWidget) {
-        // 위젯: 원형으로 그리기
-        const radius = Math.min(node.width, node.height) / 2 - 5;
-
+      if (node.isTool) {
+        // Tool: 사각형
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-
-        // 색상: output(초록), intermediate(보라)
-        if (node.node_type === "output") {
-          ctx.fillStyle = isHovered ? "#5a8d6e" : "#3d6b52";
-        } else {
-          ctx.fillStyle = isHovered ? "#6b5a8d" : "#4a3d6b";
-        }
+        ctx.roundRect(node.x, node.y, node.width, node.height, 6);
+        ctx.fillStyle = isHovered ? "#6b5a8d" : "#4a3d6b";
         ctx.fill();
-
-        // Border
-        ctx.strokeStyle = isHovered ? "#ffffff" : "#4a90d9";
+        ctx.strokeStyle = isHovered ? "#ffffff" : "#9b8dc3";
         ctx.lineWidth = isHovered ? 2 : 1;
         ctx.stroke();
       } else {
-        // 아티팩트: 상자로 그리기
+        // Artifact: 원형
+        const radius = Math.min(node.width, node.height) / 2 - 4;
         ctx.beginPath();
-        ctx.roundRect(node.x, node.y, node.width, node.height, 8);
-
-        // 색상: input(파랑)
-        ctx.fillStyle = isHovered ? "#3d5a80" : "#2b4162";
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.fillStyle = isHovered ? "#3d6b52" : "#2b5a42";
         ctx.fill();
-
-        // Border
-        ctx.strokeStyle = isHovered ? "#ffffff" : "#4a90d9";
+        ctx.strokeStyle = isHovered ? "#ffffff" : "#5a9d7e";
         ctx.lineWidth = isHovered ? 2 : 1;
         ctx.stroke();
       }
 
-      // Node label
-      ctx.font = "12px system-ui";
+      // Label
+      ctx.font = "11px system-ui";
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-
-      // Truncate long labels
-      let label = node.label;
-      if (label.length > 14) {
-        label = label.substring(0, 12) + "...";
-      }
-      ctx.fillText(label, centerX, centerY);
+      ctx.fillText(node.label, centerX, centerY);
     });
-  }, [filteredData, layoutNodes, hoveredNode]);
+  }, [filteredData, layoutNodes, layoutEdges, hoveredNode]);
 
   // Mouse interaction
   const handleMouseMove = useCallback(
@@ -364,16 +366,16 @@ export default function FlowGraphWidget({
       const y = e.clientY - rect.top;
 
       const hovered = layoutNodes.find((n) => {
-        if (n.isWidget) {
-          // 원형 히트 테스트
+        if (n.isTool) {
+          // 사각형 히트 테스트 (tool)
+          return x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height;
+        } else {
+          // 원형 히트 테스트 (artifact)
           const centerX = n.x + n.width / 2;
           const centerY = n.y + n.height / 2;
-          const radius = Math.min(n.width, n.height) / 2 - 5;
+          const radius = Math.min(n.width, n.height) / 2 - 4;
           const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
           return dist <= radius;
-        } else {
-          // 사각형 히트 테스트
-          return x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height;
         }
       });
 
@@ -496,18 +498,18 @@ export default function FlowGraphWidget({
           }}
         >
           <div className="font-medium">{hoveredNode.label}</div>
-          {hoveredNode.artifact_name && (
+          {hoveredNode.originalNode?.artifact_name && (
             <div className="text-xs text-slate-400">
-              Artifact: {hoveredNode.artifact_name}
+              {hoveredNode.originalNode.artifact_name}
             </div>
           )}
-          {hoveredNode.file_name && (
+          {hoveredNode.originalEdge?.tool_name && (
             <div className="text-xs text-slate-400">
-              File: {hoveredNode.file_name}
+              {hoveredNode.originalEdge.tool_name}
             </div>
           )}
           <div className="mt-1 text-xs text-slate-500">
-            {hoveredNode.isWidget ? "위젯 (결과)" : "아티팩트 (데이터)"}
+            {hoveredNode.isTool ? "Tool" : "Artifact"}
           </div>
         </div>
       )}
@@ -515,12 +517,12 @@ export default function FlowGraphWidget({
       {/* Legend */}
       <div className="absolute bottom-2 left-2 flex gap-3 rounded bg-slate-800/80 px-2 py-1 text-xs text-slate-300">
         <div className="flex items-center gap-1">
-          <div className="h-3 w-3 rounded bg-[#2b4162]" />
-          <span>아티팩트</span>
+          <div className="h-3 w-3 rounded bg-[#4a3d6b]" />
+          <span>Tool</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="h-3 w-3 rounded-full bg-[#3d6b52]" />
-          <span>위젯(결과)</span>
+          <div className="h-3 w-3 rounded-full bg-[#2b5a42]" />
+          <span>Artifact</span>
         </div>
       </div>
     </div>
