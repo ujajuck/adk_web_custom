@@ -1,13 +1,4 @@
-"""HTTP client that communicates with the Google ADK api_server.
-
-ADK 버전별 호환성 처리
-─────────────────────
-* 세션 생성: 409 Conflict → 이미 존재하는 세션이므로 정상 처리
-* /run 응답 형식
-  - 신형식: {"status": "success"|"error", "outputs": [...]}
-  - 구형식: JSON 배열 [event, event, ...] 또는 NDJSON/SSE
-  → 모두 {"status": ..., "outputs": [], "events": [...]} 형태로 정규화해서 반환
-"""
+"""HTTP client for Google ADK api_server."""
 
 from __future__ import annotations
 
@@ -29,11 +20,7 @@ async def create_adk_session(
     session_id: str,
     state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """POST /apps/{app}/users/{uid}/sessions/{sid} on the ADK backend.
-
-    409 Conflict は「セッションが既に存在する」ことを意味するため、
-    エラーとして扱わず既存セッションを再利用する。
-    """
+    """Create ADK session. 409 means session exists, treated as success."""
     base = settings.ADK_BASE_URL.rstrip("/")
     app = settings.ADK_APP_NAME
     url = f"{base}/apps/{app}/users/{user_id}/sessions/{session_id}"
@@ -42,33 +29,21 @@ async def create_adk_session(
         resp = await client.post(url, json=state or {})
 
         if resp.status_code == 409:
-            # Session already exists – reuse it
             log.info("ADK session already exists (409), reusing: %s", session_id)
             return {"session_id": session_id, "user_id": user_id}
 
         resp.raise_for_status()
         body = resp.json() if resp.content else {}
-        # Normalise: some ADK versions return {} on success
         if not body:
             body = {"session_id": session_id, "user_id": user_id}
         return body
 
 
 def _parse_run_response(content_type: str, text: str) -> dict[str, Any]:
-    """ADK /run 응답을 파싱한다.
-
-    신형식 (권장):
-    {
-      "status": "success"|"error",
-      "outputs": [{"type": "resource_link", "uri": "...", "mime_type": "..."}]
-    }
-
-    구형식 (하위 호환):
-    JSON 배열 [event, event, ...] → {"status": "success", "outputs": [], "events": [...]} 로 변환
-    """
+    """Parse ADK /run response into {status, outputs, events}."""
     stripped = text.strip()
 
-    # ── 1. 신형식 { status, outputs } ─────────────────────────────────────
+    # New format: {"status": "...", "outputs": [...]}
     if stripped.startswith("{"):
         try:
             result = json.loads(stripped)
@@ -77,7 +52,7 @@ def _parse_run_response(content_type: str, text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # ── 2. 구형식 JSON 배열 → 신형식으로 변환 ─────────────────────────────
+    # Legacy: JSON array -> convert to new format
     if stripped.startswith("["):
         try:
             events = json.loads(stripped)
@@ -86,13 +61,12 @@ def _parse_run_response(content_type: str, text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # ── 3. NDJSON / SSE 줄별 파싱 (구형식) ────────────────────────────────
+    # Legacy: NDJSON/SSE line-by-line
     events: list[dict[str, Any]] = []
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line == "[DONE]":
             continue
-        # SSE "data: " 접두사 제거
         if line.startswith("data:"):
             line = line[5:].strip()
         if not line or line == "[DONE]":
@@ -100,14 +74,13 @@ def _parse_run_response(content_type: str, text: str) -> dict[str, Any]:
         try:
             obj = json.loads(line)
             if isinstance(obj, dict):
-                # 신형식이 SSE로 왔을 수 있음
                 if "status" in obj and "outputs" in obj:
                     return obj
                 events.append(obj)
             elif isinstance(obj, list):
                 events.extend(obj)
         except json.JSONDecodeError:
-            log.debug("Skipping non-JSON line from ADK /run: %.120s", line)
+            log.debug("Skipping non-JSON line: %.120s", line)
 
     return {"status": "success", "outputs": [], "events": events}
 
@@ -117,15 +90,7 @@ async def send_message_to_adk(
     session_id: str,
     message: str,
 ) -> dict[str, Any]:
-    """POST /run on the ADK backend and return the response dict.
-
-    반환 형식:
-    {
-      "status": "success"|"error",
-      "outputs": [...],      # 신형식
-      "events": [...]        # 구형식 (하위 호환)
-    }
-    """
+    """Send message to ADK. Returns {status, outputs, events}."""
     base = settings.ADK_BASE_URL.rstrip("/")
     app = settings.ADK_APP_NAME
 

@@ -1,4 +1,4 @@
-"""Chat endpoint – proxies to ADK, parses response, stores results."""
+"""Chat endpoint - proxy to ADK backend."""
 
 from __future__ import annotations
 
@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 def _resolve_artifact_path(
     user_id: str, session_id: str, filename: str, version: int
 ) -> Path:
-    """Build the filesystem path to an ADK artifact."""
     root = Path(settings.ADK_ARTIFACT_ROOT)
     return (
         root
@@ -51,11 +50,9 @@ def _resolve_artifact_path(
 
 @router.post("", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """Send a user message to ADK, parse the response, and persist."""
     log.info("Chat request: user=%s session=%s msg=%s", req.user_id, req.session_id, req.message[:100])
     job_id = f"job_{uuid.uuid4().hex[:12]}"
 
-    # 1. Forward to ADK
     try:
         adk_result = await send_message_to_adk(req.user_id, req.session_id, req.message)
         log.debug("ADK returned status=%s", adk_result.get("status"))
@@ -63,26 +60,22 @@ async def chat(req: ChatRequest):
         log.error("ADK request failed: %s", exc, exc_info=True)
         raise HTTPException(502, detail=f"ADK request failed: {exc}")
 
-    # Handle error status from ADK
     if adk_result.get("status") == "error":
         error_msg = adk_result.get("error", "Unknown ADK error")
         log.warning("ADK returned error: %s", error_msg)
         raise HTTPException(502, detail=f"ADK error: {error_msg}")
 
-    # Extract events (for backward compatibility parsers)
     events = adk_result.get("events", [])
-    # Extract outputs (new format: resource_link items)
     outputs = adk_result.get("outputs", [])
     log.debug("ADK returned %d events, %d outputs", len(events), len(outputs))
 
-    # 2. Parse response
     assistant_text = extract_assistant_text(events)
     artifact_delta = extract_artifact_delta(events)
     plotly_result = extract_plotly_fig(events)
 
-    # 3. Process artifacts by type (.csv → CsvFileMeta, .json → PlotlyFigMeta)
     csv_metas: list[CsvFileMeta] = []
     plotly_metas: list[PlotlyFigMeta] = []
+
     for filename, version in artifact_delta.items():
         file_id = f"{req.session_id}__{filename}__v{version}"
         artifact_path = _resolve_artifact_path(
@@ -93,7 +86,6 @@ async def chat(req: ChatRequest):
             log.warning("Artifact path does not exist: %s", artifact_path)
             continue
 
-        # CSV 파일 → CsvFileMeta
         if filename.lower().endswith(".csv"):
             try:
                 df = csv_store.store_from_path(file_id, artifact_path, filename)
@@ -110,12 +102,10 @@ async def chat(req: ChatRequest):
             except Exception as exc:
                 log.warning("Failed to load CSV %s: %s", filename, exc)
 
-        # JSON 파일 → PlotlyFigMeta (Plotly figure로 간주)
         elif filename.lower().endswith(".json"):
             try:
                 raw_content = artifact_path.read_text(encoding="utf-8")
                 fig_data = json.loads(raw_content)
-                # pio.to_json()가 문자열을 반환하므로 이중 인코딩 처리
                 if isinstance(fig_data, str):
                     fig_data = json.loads(fig_data)
                 fig_id = f"{req.session_id}__fig__{uuid.uuid4().hex[:8]}"
@@ -132,7 +122,6 @@ async def chat(req: ChatRequest):
             except Exception as exc:
                 log.warning("Failed to load JSON artifact %s: %s", filename, exc)
 
-    # 4. Process plotly figure (embedded in events)
     if plotly_result:
         fig_id = f"{req.session_id}__fig__{uuid.uuid4().hex[:8]}"
         plotly_store.store(fig_id, plotly_result["title"], plotly_result["fig"])
@@ -144,15 +133,14 @@ async def chat(req: ChatRequest):
             )
         )
 
-    # 4b. Process plotly URLs (MCP resource links from tool outputs AND assistant text)
     resource_link_urls = extract_resource_links_from_events(events)
     text_urls = extract_plotly_urls(assistant_text)
-    # Also extract URIs from new "outputs" format
     output_urls = [
         o.get("uri") for o in outputs
         if isinstance(o, dict) and o.get("type") == "resource_link" and o.get("uri")
     ]
-    plotly_urls = list(dict.fromkeys(resource_link_urls + output_urls + text_urls))  # dedupe, preserve order
+    plotly_urls = list(dict.fromkeys(resource_link_urls + output_urls + text_urls))
+
     for url in plotly_urls:
         try:
             fetched = await fetch_plotly_from_url(url)
@@ -170,7 +158,6 @@ async def chat(req: ChatRequest):
         except Exception as exc:
             log.warning("Failed to fetch Plotly from URL %s: %s", url, exc)
 
-    # 5. Parse and store artifact flow
     try:
         existing_flow = flow_store.get(req.session_id)
         updated_flow = parse_artifact_flow(
@@ -184,7 +171,6 @@ async def chat(req: ChatRequest):
     except Exception as exc:
         log.warning("Failed to parse artifact flow: %s", exc)
 
-    # 6. Persist to SQLite
     db = await get_db()
     try:
         await db.execute(
@@ -205,7 +191,6 @@ async def chat(req: ChatRequest):
     finally:
         await db.close()
 
-    # Build output items from ADK outputs
     output_items = [
         OutputItem(
             type=o.get("type", ""),
