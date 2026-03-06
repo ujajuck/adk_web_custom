@@ -22,6 +22,21 @@ CREATE TABLE IF NOT EXISTS chat_jobs (
     plotly_meta     TEXT DEFAULT '[]',
     created_at      TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS notebooks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    notebook_id TEXT UNIQUE NOT NULL,
+    user_id     TEXT NOT NULL,
+    session_id  TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    messages    TEXT DEFAULT '[]',
+    is_shared   INTEGER DEFAULT 0,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notebooks_user ON notebooks(user_id);
+CREATE INDEX IF NOT EXISTS idx_notebooks_shared ON notebooks(is_shared);
 """
 
 

@@ -6,7 +6,7 @@ import {
   useState,
   useCallback,
 } from "react";
-import { Send, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Send, Loader2, AlertCircle, RefreshCw, Save, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
   "http://localhost:8080";
 
-type SessionStatus = "idle" | "creating" | "ready" | "error";
+type SessionStatus = "idle" | "input_user" | "creating" | "ready" | "error";
 
 type WorkspaceSendDetail = {
   text: string;
@@ -30,11 +30,13 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
 
+  const [userIdInput, setUserIdInput] = useState("");
   const [userId, setUserId] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("idle");
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("input_user");
 
   const [isSending, setIsSending] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const creatingRef = useRef(false);
 
@@ -48,18 +50,18 @@ export default function ChatPanel() {
     setMessages((m) => [...m, { role, text }]);
   }
 
-  const createSession = useCallback(async () => {
+  const createSession = useCallback(async (inputUserId: string) => {
     if (creatingRef.current) return;
     creatingRef.current = true;
 
-    const id = `user_${Date.now()}`;
+    const sessionIdVal = `${inputUserId}_${Date.now()}`;
     setSessionStatus("creating");
-    pushMsg("assistant", "세션 생성 중…");
+    setMessages([{ role: "assistant", text: "세션 생성 중…" }]);
 
     try {
       const reqBody = {
-        user_id: id,
-        session_id: id,
+        user_id: inputUserId,
+        session_id: sessionIdVal,
         session_name: "",
       };
       console.log("[ChatPanel] Creating session:", API_URL, reqBody);
@@ -84,23 +86,27 @@ export default function ChatPanel() {
         throw new Error(json?.detail ?? `HTTP ${res.status}`);
       }
 
-      setUserId(id);
-      setSessionId(id);
+      setUserId(inputUserId);
+      setSessionId(sessionIdVal);
       setSessionStatus("ready");
-      pushMsg("assistant", `세션 준비됨 · ${id}`);
+      setMessages([{ role: "assistant", text: `세션 준비됨 · ${inputUserId}` }]);
+
+      // Emit event to load notebooks
+      window.dispatchEvent(new CustomEvent("notebook:load", { detail: { userId: inputUserId } }));
     } catch (e: any) {
       console.error("[ChatPanel] Session error:", e);
       setSessionStatus("error");
-      pushMsg("assistant", `세션 생성 실패: ${String(e?.message ?? e)}`);
+      setMessages([{ role: "assistant", text: `세션 생성 실패: ${String(e?.message ?? e)}` }]);
     } finally {
       creatingRef.current = false;
     }
   }, []);
 
-  useEffect(() => {
-    createSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const handleStartSession = () => {
+    const trimmed = userIdInput.trim();
+    if (!trimmed) return;
+    createSession(trimmed);
+  };
 
   const sendTextToAdk = useCallback(
     async (text: string) => {
@@ -215,6 +221,40 @@ export default function ChatPanel() {
     void sendTextToAdk(input);
   }
 
+  const saveNotebook = useCallback(async () => {
+    if (!userId || !sessionId || messages.length === 0) return;
+
+    setIsSaving(true);
+    try {
+      const title = `대화 ${new Date().toLocaleString("ko-KR")}`;
+      const res = await fetch(`${API_URL}/api/notebooks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          session_id: sessionId,
+          title,
+          messages,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const notebook = await res.json();
+      pushMsg("assistant", `노트북 저장됨: ${notebook.title}`);
+
+      // Emit event to refresh notebook list
+      window.dispatchEvent(new CustomEvent("notebook:refresh", { detail: { userId } }));
+    } catch (e: any) {
+      console.error("[ChatPanel] Save error:", e);
+      pushMsg("assistant", `저장 실패: ${String(e?.message ?? e)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [userId, sessionId, messages]);
+
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<WorkspaceSendDetail>;
@@ -249,7 +289,75 @@ export default function ChatPanel() {
     return () => window.removeEventListener("workspace:flow", handler);
   }, [sessionId, addFlowGraphWindow]);
 
+  // Listen for notebook selection (load history)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{
+        notebook: {
+          notebook_id: string;
+          user_id: string;
+          session_id: string;
+          title: string;
+          messages: Array<{ role: string; text: string }>;
+        };
+      }>;
+      const nb = ce.detail?.notebook;
+      if (nb?.messages) {
+        setMessages(nb.messages as Msg[]);
+        pushMsg("assistant", `노트북 "${nb.title}" 불러옴 (읽기 전용)`);
+      }
+    };
+
+    window.addEventListener("notebook:select", handler);
+    return () => window.removeEventListener("notebook:select", handler);
+  }, []);
+
   const canSend = sessionStatus === "ready" && !isSending;
+
+  // User ID input screen
+  if (sessionStatus === "input_user" || sessionStatus === "idle") {
+    return (
+      <div className="h-full flex flex-col bg-white">
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="w-full max-w-sm space-y-4">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <User size={32} className="text-blue-500" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-800">사용자 ID 입력</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                ID를 입력하면 저장된 노트북을 불러옵니다
+              </p>
+            </div>
+            <div className="space-y-3">
+              <input
+                value={userIdInput}
+                onChange={(e) => setUserIdInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleStartSession()}
+                placeholder="사용자 ID (예: hong_analyst)"
+                className={cn(
+                  "w-full h-12 px-4 rounded-lg border text-sm transition-all",
+                  "bg-gray-50 border-gray-300 placeholder:text-gray-400",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white"
+                )}
+              />
+              <button
+                onClick={handleStartSession}
+                disabled={!userIdInput.trim()}
+                className={cn(
+                  "w-full h-12 rounded-lg font-medium text-sm transition-all",
+                  "bg-blue-500 text-white hover:bg-blue-600",
+                  "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                )}
+              >
+                시작하기
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -257,9 +365,9 @@ export default function ChatPanel() {
       <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-2 min-h-[44px]">
         {sessionStatus === "ready" && (
           <>
-            <span className="text-xs text-gray-500">session:</span>
-            <span className="font-mono text-[10px] text-gray-600 bg-white border border-gray-200 rounded px-1.5 py-0.5 truncate max-w-[160px]">
-              {sessionId}
+            <User size={12} className="text-gray-400" />
+            <span className="font-mono text-xs text-gray-600 truncate max-w-[120px]">
+              {userId}
             </span>
           </>
         )}
@@ -280,12 +388,21 @@ export default function ChatPanel() {
           <button
             className="h-7 px-2.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md flex items-center gap-1 transition-colors"
             onClick={() => {
-              setSessionStatus("idle");
-              createSession();
+              setSessionStatus("input_user");
             }}
           >
             <RefreshCw size={12} />
-            재연결
+            재시작
+          </button>
+        )}
+        {sessionStatus === "ready" && (
+          <button
+            className="h-7 px-2.5 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md flex items-center gap-1 transition-colors disabled:opacity-50"
+            onClick={saveNotebook}
+            disabled={isSaving || messages.length === 0}
+          >
+            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+            저장
           </button>
         )}
         {isSending && (

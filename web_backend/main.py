@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import chat, csv_data, files, flow, plotly_data, sessions
+from .routers import chat, csv_data, files, flow, notebooks, plotly_data, sessions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,6 +91,7 @@ app.include_router(csv_data.router)
 app.include_router(plotly_data.router)
 app.include_router(files.router)
 app.include_router(flow.router)
+app.include_router(notebooks.router)
 
 
 @app.get("/health")
