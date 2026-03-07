@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
-import { Check, X } from "lucide-react";
+import { Check, X, Minimize2, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "./WorkspaceContext";
@@ -26,7 +26,12 @@ export default function WorkspacePanel() {
   } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
 
+  // Track minimized state and saved sizes
+  const [minimized, setMinimized] = useState<Record<string, boolean>>({});
+  const [savedSizes, setSavedSizes] = useState<Record<string, { w: number; h: number }>>({});
+
   const HEADER_H = 48;
+  const MINIMIZED_HEIGHT = 40;
 
   const isEmpty = useMemo(() => windows.length === 0, [windows.length]);
 
@@ -55,13 +60,72 @@ export default function WorkspacePanel() {
     window.dispatchEvent(new CustomEvent("workspace:save"));
   };
 
+  // Ctrl+click handler for widget header
+  const handleHeaderClick = (e: React.MouseEvent, win: (typeof windows)[number]) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const artifactName = win.widget.title;
+      // Add @artifactName to chat input
+      window.dispatchEvent(
+        new CustomEvent("chat:insert", {
+          detail: { text: `@${artifactName} `, artifact: artifactName },
+        }),
+      );
+    }
+  };
+
+  const toggleMinimize = (winId: string, currentW: number, currentH: number) => {
+    const isMinimized = minimized[winId];
+    if (isMinimized) {
+      // Restore
+      const saved = savedSizes[winId];
+      if (saved) {
+        updateWindow(winId, { h: saved.h });
+      }
+    } else {
+      // Minimize - save current size
+      setSavedSizes((prev) => ({ ...prev, [winId]: { w: currentW, h: currentH } }));
+      updateWindow(winId, { h: MINIMIZED_HEIGHT });
+    }
+    setMinimized((prev) => ({ ...prev, [winId]: !isMinimized }));
+  };
+
+  const toggleMaximize = (winId: string, currentW: number, currentH: number) => {
+    const bounds = boundsRef.current;
+    if (!bounds) return;
+
+    const maxW = bounds.clientWidth - 20;
+    const maxH = bounds.clientHeight - HEADER_H - 20;
+
+    // Check if already maximized
+    const win = windows.find((w) => w.id === winId);
+    if (!win) return;
+
+    const isMaximized = win.w >= maxW - 50 && win.h >= maxH - 50;
+
+    if (isMaximized) {
+      // Restore to saved size
+      const saved = savedSizes[winId];
+      if (saved) {
+        updateWindow(winId, { w: saved.w, h: saved.h, x: 20, y: 20 });
+      }
+    } else {
+      // Maximize - save current size first
+      setSavedSizes((prev) => ({ ...prev, [winId]: { w: currentW, h: currentH } }));
+      updateWindow(winId, { w: maxW, h: maxH, x: 10, y: 10 });
+    }
+    // Clear minimized state
+    setMinimized((prev) => ({ ...prev, [winId]: false }));
+  };
+
   function renderWidget(win: (typeof windows)[number]) {
     const w = win.widget;
     switch (w.type) {
       case "tableUrl":
         return <CsvTableFromUrlWidget src={w.src} />;
       case "csvFile":
-        return <CsvFileWidget fileId={w.fileId} />;
+        return <CsvFileWidget fileId={w.fileId} artifactName={w.title} />;
       case "plotly":
         return <PlotlyFigureWidget fig={w.fig} />;
       case "flowGraph":
@@ -104,12 +168,13 @@ export default function WorkspacePanel() {
 
         {windows.map((win) => {
           const isFlowGraph = win.widget.type === "flowGraph";
+          const isMin = minimized[win.id];
 
           return (
             <Rnd
               key={win.id}
               bounds="parent"
-              size={{ width: win.w, height: win.h }}
+              size={{ width: win.w, height: isMin ? MINIMIZED_HEIGHT : win.h }}
               position={{ x: win.x, y: win.y }}
               onDragStart={() => bringToFront(win.id)}
               onResizeStart={() => bringToFront(win.id)}
@@ -124,18 +189,56 @@ export default function WorkspacePanel() {
               }}
               style={{ zIndex: win.z }}
               className="rounded-xl border bg-card shadow-lg overflow-hidden"
-              minWidth={360}
-              minHeight={240}
+              minWidth={200}
+              minHeight={MINIMIZED_HEIGHT}
               dragHandleClassName="ws-window-handle"
+              enableResizing={!isMin}
             >
               {/* window title bar */}
               <div
                 className="ws-window-handle h-10 flex items-center gap-2 px-2.5 border-b bg-card cursor-grab select-none"
                 onMouseDown={() => bringToFront(win.id)}
+                onClick={(e) => handleHeaderClick(e, win)}
               >
-                <span className="font-bold text-[13px] flex-1 truncate">
+                <span
+                  className={cn(
+                    "font-bold text-[13px] flex-1 truncate",
+                    "hover:text-blue-600 transition-colors",
+                  )}
+                  title="Ctrl+클릭으로 채팅에 참조 추가"
+                >
                   {win.widget.title}
                 </span>
+
+                {/* minimize */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleMinimize(win.id, win.w, win.h);
+                  }}
+                  aria-label={isMin ? "복원" : "최소화"}
+                  title={isMin ? "복원" : "최소화"}
+                  className="h-7 w-7 shrink-0"
+                >
+                  <Minimize2 size={14} />
+                </Button>
+
+                {/* maximize */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleMaximize(win.id, win.w, win.h);
+                  }}
+                  aria-label="최대화"
+                  title="최대화/복원"
+                  className="h-7 w-7 shrink-0"
+                >
+                  <Maximize2 size={14} />
+                </Button>
 
                 {/* check toggle - flowGraph 위젯은 표시 안함 */}
                 {!isFlowGraph && (
@@ -172,9 +275,11 @@ export default function WorkspacePanel() {
                 </Button>
               </div>
 
-              <div className="h-[calc(100%-40px)] overflow-auto">
-                {renderWidget(win)}
-              </div>
+              {!isMin && (
+                <div className="h-[calc(100%-40px)] overflow-auto">
+                  {renderWidget(win)}
+                </div>
+              )}
             </Rnd>
           );
         })}

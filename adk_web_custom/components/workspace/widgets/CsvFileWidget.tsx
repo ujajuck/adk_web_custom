@@ -49,7 +49,13 @@ const TableRow = memo(function TableRow({
   );
 });
 
-export default function CsvFileWidget({ fileId }: { fileId: string }) {
+export default function CsvFileWidget({
+  fileId,
+  artifactName,
+}: {
+  fileId: string;
+  artifactName?: string;
+}) {
   const [page, setPage] = useState<CsvPage | null>(null);
   const [offset, setOffset] = useState(0);
   const [err, setErr] = useState("");
@@ -103,6 +109,20 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
   }, [page, showAllCols]);
 
   const hasHiddenCols = page && page.columns.length > MAX_VISIBLE_COLS && !showAllCols;
+
+  // Ctrl+click on column header
+  const handleColumnClick = (e: React.MouseEvent, colName: string) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      // Insert 'column_name' into chat
+      window.dispatchEvent(
+        new CustomEvent("chat:insert", {
+          detail: { text: `'${colName}' `, column: colName, artifact: artifactName },
+        }),
+      );
+    }
+  };
 
   if (err)
     return <div className="p-3 text-red-500 text-sm">{err}</div>;
@@ -165,7 +185,9 @@ export default function CsvFileWidget({ fileId }: { fileId: string }) {
               {visibleColumns.map((c) => (
                 <th
                   key={c}
-                  className="text-left text-[12px] font-medium text-gray-700 px-3 py-1.5 border-b border-r border-gray-200 whitespace-nowrap truncate w-[120px]"
+                  onClick={(e) => handleColumnClick(e, c)}
+                  className="text-left text-[12px] font-medium text-gray-700 px-3 py-1.5 border-b border-r border-gray-200 whitespace-nowrap truncate w-[120px] cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                  title="Ctrl+클릭으로 채팅에 컬럼 추가"
                 >
                   {c}
                 </th>
