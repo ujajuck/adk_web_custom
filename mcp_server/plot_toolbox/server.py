@@ -5,6 +5,9 @@ from .histogram import histogram
 from .scatter_plot import scatter_plot
 from .line_plot import line_plot
 from .pie_chart import pie_chart
+from .box_plot import box_plot
+from .heatmap import heatmap
+from .combine_plots import combine_plots
 
 plot_toolbox = FastMCP(name="plot_toolbox")
 
@@ -13,3 +16,6 @@ plot_toolbox.tool(histogram)
 plot_toolbox.tool(scatter_plot)
 plot_toolbox.tool(line_plot)
 plot_toolbox.tool(pie_chart)
+plot_toolbox.tool(box_plot)
+plot_toolbox.tool(heatmap)
+plot_toolbox.tool(combine_plots)

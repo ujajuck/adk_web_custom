@@ -83,3 +83,47 @@ class TabularDirectSource(BaseModel):
         if not self.data:
             raise ValueError("data가 비어있습니다.")
         return pd.DataFrame(self.data)
+
+
+def resolve_dataframe(source: Dict[str, Any]) -> pd.DataFrame:
+    """소스 딕셔너리에서 DataFrame을 로드하는 헬퍼 함수.
+
+    Args:
+        source: 소스 설정 딕셔너리
+            - source_type: "direct", "artifact", "file" 중 하나
+
+    Returns:
+        pd.DataFrame: 로드된 데이터프레임
+    """
+    if source is None:
+        raise ValueError("source가 필요합니다.")
+
+    source_type = source.get("source_type") or source.get("kind")
+
+    if source_type == "direct":
+        data = source.get("data", [])
+        if not data:
+            raise ValueError("data가 비어있습니다.")
+        return pd.DataFrame(data)
+
+    elif source_type == "artifact":
+        artifact_source = ArtifactSource(**source)
+        return artifact_source.resolve_dataframe()
+
+    elif source_type == "file":
+        file_source = FileSource(**source)
+        return file_source.resolve_dataframe()
+
+    elif source_type == "locator":
+        # 하위 호환: 기존 locator 형식 지원
+        locator = source.get("artifact_locator", {})
+        artifact_source = ArtifactSource(
+            source_type="artifact",
+            artifact_name=locator.get("artifact_name") or locator.get("file_name"),
+            user_id=source.get("user_id"),
+            session_id=source.get("session_id"),
+        )
+        return artifact_source.resolve_dataframe()
+
+    else:
+        raise ValueError(f"지원하지 않는 source_type: {source_type}. direct|artifact|file 중 선택하세요.")
