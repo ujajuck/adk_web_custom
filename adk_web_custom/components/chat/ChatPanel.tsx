@@ -315,6 +315,67 @@ export default function ChatPanel() {
     return () => window.removeEventListener("notebook:select", handler);
   }, []);
 
+  // Listen for notebook:add events (from FlowWidget save)
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const ce = e as CustomEvent<{
+        type: string;
+        sessionId: string;
+        data: any;
+        selectedArtifacts: string[];
+        title: string;
+      }>;
+      const { selectedArtifacts, title } = ce.detail || {};
+
+      if (!userId || !sessionId) {
+        pushMsg("assistant", "세션이 아직 준비되지 않았습니다.");
+        return;
+      }
+
+      // Filter messages to only include those related to selected artifacts
+      let filteredMessages = messages;
+      if (selectedArtifacts && selectedArtifacts.length > 0) {
+        filteredMessages = messages.filter((msg) =>
+          selectedArtifacts.some((artifact) =>
+            msg.text.toLowerCase().includes(artifact.toLowerCase())
+          )
+        );
+        // If no messages match, include all
+        if (filteredMessages.length === 0) {
+          filteredMessages = messages;
+        }
+      }
+
+      try {
+        const notebookTitle = title || `Flow ${new Date().toLocaleString("ko-KR")}`;
+        const res = await fetch(`${API_URL}/api/notebooks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            session_id: sessionId,
+            title: notebookTitle,
+            messages: filteredMessages,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const notebook = await res.json();
+        pushMsg("assistant", `노트북 저장됨: ${notebook.title} (${selectedArtifacts?.length || 0}개 아티팩트)`);
+        window.dispatchEvent(new CustomEvent("notebook:refresh", { detail: { userId } }));
+      } catch (e: any) {
+        console.error("[ChatPanel] Notebook add error:", e);
+        pushMsg("assistant", `저장 실패: ${String(e?.message ?? e)}`);
+      }
+    };
+
+    window.addEventListener("notebook:add", handler);
+    return () => window.removeEventListener("notebook:add", handler);
+  }, [userId, sessionId, messages]);
+
   // Listen for chat:insert events (from Ctrl+click on widgets/columns)
   useEffect(() => {
     const handler = (e: Event) => {

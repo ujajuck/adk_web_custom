@@ -2,9 +2,8 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
-import { Check, X, Minimize2, Maximize2 } from "lucide-react";
+import { X, Minus, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { useWorkspace } from "./WorkspaceContext";
 import CsvTableFromUrlWidget from "@/components/workspace/widgets/CsvTableFromUrlWidget";
 import CsvFileWidget from "@/components/workspace/widgets/CsvFileWidget";
@@ -21,7 +20,6 @@ export default function WorkspacePanel() {
     updateWindow,
     bringToFront,
     closeWindow,
-    toggleWindowCheck,
     checkedWidgets,
   } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
@@ -31,7 +29,7 @@ export default function WorkspacePanel() {
   const [savedSizes, setSavedSizes] = useState<Record<string, { w: number; h: number }>>({});
 
   const HEADER_H = 48;
-  const MINIMIZED_HEIGHT = 40;
+  const MINIMIZED_HEIGHT = 36;
 
   const isEmpty = useMemo(() => windows.length === 0, [windows.length]);
 
@@ -56,9 +54,6 @@ export default function WorkspacePanel() {
     window.dispatchEvent(new CustomEvent("workspace:flow"));
   };
 
-  const onSave = () => {
-    window.dispatchEvent(new CustomEvent("workspace:save"));
-  };
 
   // Ctrl+click handler for widget header
   const handleHeaderClick = (e: React.MouseEvent, win: (typeof windows)[number]) => {
@@ -66,7 +61,6 @@ export default function WorkspacePanel() {
       e.preventDefault();
       e.stopPropagation();
       const artifactName = win.widget.title;
-      // Add @artifactName to chat input
       window.dispatchEvent(
         new CustomEvent("chat:insert", {
           detail: { text: `@${artifactName} `, artifact: artifactName },
@@ -78,13 +72,11 @@ export default function WorkspacePanel() {
   const toggleMinimize = (winId: string, currentW: number, currentH: number) => {
     const isMinimized = minimized[winId];
     if (isMinimized) {
-      // Restore
       const saved = savedSizes[winId];
       if (saved) {
         updateWindow(winId, { h: saved.h });
       }
     } else {
-      // Minimize - save current size
       setSavedSizes((prev) => ({ ...prev, [winId]: { w: currentW, h: currentH } }));
       updateWindow(winId, { h: MINIMIZED_HEIGHT });
     }
@@ -98,24 +90,20 @@ export default function WorkspacePanel() {
     const maxW = bounds.clientWidth - 20;
     const maxH = bounds.clientHeight - HEADER_H - 20;
 
-    // Check if already maximized
     const win = windows.find((w) => w.id === winId);
     if (!win) return;
 
     const isMaximized = win.w >= maxW - 50 && win.h >= maxH - 50;
 
     if (isMaximized) {
-      // Restore to saved size
       const saved = savedSizes[winId];
       if (saved) {
         updateWindow(winId, { w: saved.w, h: saved.h, x: 20, y: 20 });
       }
     } else {
-      // Maximize - save current size first
       setSavedSizes((prev) => ({ ...prev, [winId]: { w: currentW, h: currentH } }));
       updateWindow(winId, { w: maxW, h: maxH, x: 10, y: 10 });
     }
-    // Clear minimized state
     setMinimized((prev) => ({ ...prev, [winId]: false }));
   };
 
@@ -133,6 +121,7 @@ export default function WorkspacePanel() {
           <FlowGraphWidget
             sessionId={w.sessionId}
             checkedWidgets={checkedWidgets}
+            allWindows={windows}
           />
         );
       default:
@@ -145,13 +134,12 @@ export default function WorkspacePanel() {
   return (
     <div
       ref={boundsRef}
-      className="relative h-full min-h-dvh overflow-hidden bg-muted/30"
+      className="relative h-full min-h-dvh overflow-hidden bg-slate-100"
     >
       <WorkspaceTopBar
         height={HEADER_H}
         onRefresh={onRefresh}
         onFlow={onFlow}
-        onSave={onSave}
       />
 
       <div
@@ -167,7 +155,6 @@ export default function WorkspacePanel() {
         />
 
         {windows.map((win) => {
-          const isFlowGraph = win.widget.type === "flowGraph";
           const isMin = minimized[win.id];
 
           return (
@@ -188,7 +175,7 @@ export default function WorkspacePanel() {
                 });
               }}
               style={{ zIndex: win.z }}
-              className="rounded-xl border bg-card shadow-lg overflow-hidden"
+              className="rounded border bg-card shadow-md overflow-hidden"
               minWidth={200}
               minHeight={MINIMIZED_HEIGHT}
               dragHandleClassName="ws-window-handle"
@@ -196,13 +183,13 @@ export default function WorkspacePanel() {
             >
               {/* window title bar */}
               <div
-                className="ws-window-handle h-10 flex items-center gap-2 px-2.5 border-b bg-card cursor-grab select-none"
+                className="ws-window-handle h-9 flex items-center gap-1 px-2 border-b bg-slate-50 cursor-grab select-none"
                 onMouseDown={() => bringToFront(win.id)}
                 onClick={(e) => handleHeaderClick(e, win)}
               >
                 <span
                   className={cn(
-                    "font-bold text-[13px] flex-1 truncate",
+                    "font-semibold text-xs flex-1 truncate text-slate-700",
                     "hover:text-blue-600 transition-colors",
                   )}
                   title="Ctrl+클릭으로 채팅에 참조 추가"
@@ -211,72 +198,44 @@ export default function WorkspacePanel() {
                 </span>
 
                 {/* minimize */}
-                <Button
-                  variant="outline"
-                  size="icon"
+                <button
                   onClick={(e) => {
                     e.stopPropagation();
                     toggleMinimize(win.id, win.w, win.h);
                   }}
-                  aria-label={isMin ? "복원" : "최소화"}
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 transition-colors"
                   title={isMin ? "복원" : "최소화"}
-                  className="h-7 w-7 shrink-0"
                 >
-                  <Minimize2 size={14} />
-                </Button>
+                  <Minus size={12} />
+                </button>
 
                 {/* maximize */}
-                <Button
-                  variant="outline"
-                  size="icon"
+                <button
                   onClick={(e) => {
                     e.stopPropagation();
                     toggleMaximize(win.id, win.w, win.h);
                   }}
-                  aria-label="최대화"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 transition-colors"
                   title="최대화/복원"
-                  className="h-7 w-7 shrink-0"
                 >
-                  <Maximize2 size={14} />
-                </Button>
-
-                {/* check toggle - flowGraph 위젯은 표시 안함 */}
-                {!isFlowGraph && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleWindowCheck(win.id);
-                    }}
-                    aria-label={win.checked ? "체크 해제" : "체크"}
-                    title={win.checked ? "Flow에서 제외" : "Flow에 포함"}
-                    className={cn(
-                      "h-7 w-7 shrink-0",
-                      win.checked
-                        ? "bg-success text-success-foreground border-success hover:bg-success/90"
-                        : "border-muted-foreground/50 text-muted-foreground",
-                    )}
-                  >
-                    <Check size={14} />
-                  </Button>
-                )}
+                  <Square size={10} />
+                </button>
 
                 {/* close */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => closeWindow(win.id)}
-                  aria-label="창 닫기"
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeWindow(win.id);
+                  }}
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 hover:text-red-600 text-slate-500 transition-colors"
                   title="닫기"
-                  className="h-7 w-7 shrink-0"
                 >
-                  <X size={14} />
-                </Button>
+                  <X size={12} />
+                </button>
               </div>
 
               {!isMin && (
-                <div className="h-[calc(100%-40px)] overflow-auto">
+                <div className="h-[calc(100%-36px)] overflow-auto">
                   {renderWidget(win)}
                 </div>
               )}
