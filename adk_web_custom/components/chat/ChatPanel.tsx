@@ -6,7 +6,7 @@ import {
   useState,
   useCallback,
 } from "react";
-import { Send, Loader2, AlertCircle, RefreshCw, Save, User, Paperclip } from "lucide-react";
+import { Send, Loader2, AlertCircle, RefreshCw, Save, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -37,10 +37,8 @@ export default function ChatPanel() {
 
   const [isSending, setIsSending] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const creatingRef = useRef(false);
 
   useEffect(() => {
@@ -398,128 +396,6 @@ export default function ChatPanel() {
     }
   };
 
-  // File attachment handling
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      setAttachedFiles(Array.from(files));
-    }
-    e.target.value = "";
-  };
-
-  const handleFileDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      setAttachedFiles(Array.from(files));
-    }
-  };
-
-  const removeAttachedFile = (index: number) => {
-    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const sendWithFiles = async () => {
-    const t = input.trim();
-    if ((!t && attachedFiles.length === 0) || isSending) return;
-
-    if (!userId || !sessionId) {
-      pushMsg("assistant", "세션이 아직 준비되지 않았습니다.");
-      return;
-    }
-
-    setIsSending(true);
-
-    // Show user message with file info
-    const fileNames = attachedFiles.map((f) => f.name).join(", ");
-    const displayText = fileNames ? `${t}\n[첨부: ${fileNames}]` : t;
-    pushMsg("user", displayText);
-    setInput("");
-
-    try {
-      // Upload files first if any
-      const uploadedPaths: string[] = [];
-      for (const file of attachedFiles) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("session_id", sessionId);
-
-        const uploadRes = await fetch(`${API_URL}/api/files/upload`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          uploadedPaths.push(uploadData.path || uploadData.filename || file.name);
-        }
-      }
-
-      setAttachedFiles([]);
-
-      // Include file paths in message
-      let finalMessage = t;
-      if (uploadedPaths.length > 0) {
-        finalMessage = `${t}\n\n[첨부 파일: ${uploadedPaths.join(", ")}]`;
-      }
-
-      // Send to backend
-      const reqBody = {
-        user_id: userId,
-        session_id: sessionId,
-        message: finalMessage,
-      };
-
-      const res = await fetch(`${API_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqBody),
-      });
-
-      const responseText = await res.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(responseText);
-      } catch {
-        pushMsg("assistant", `응답 파싱 실패: ${responseText.slice(0, 200)}`);
-        return;
-      }
-
-      if (!res.ok) {
-        pushMsg("assistant", `요청 실패 (${res.status}): ${JSON.stringify(json?.detail ?? json)}`);
-        return;
-      }
-
-      // Process response (same as sendTextToAdk)
-      const csvFiles: Array<{ file_id: string; filename: string }> = json?.csv_files ?? [];
-      for (const csv of csvFiles) {
-        if (csv.file_id && csv.filename) {
-          addCsvFileWindow(csv.filename, csv.file_id);
-          pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${csv.filename}`);
-        }
-      }
-
-      const plotlyFigs: Array<{ fig_id: string; title: string; fig: any }> = json?.plotly_figs ?? [];
-      for (const pf of plotlyFigs) {
-        if (pf.fig && pf.title) {
-          addPlotlyWindow(pf.title, pf.fig);
-          pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${pf.title}`);
-        }
-      }
-
-      if (json?.text) {
-        pushMsg("assistant", json.text);
-      } else if (csvFiles.length === 0 && plotlyFigs.length === 0) {
-        pushMsg("assistant", `응답 없음`);
-      }
-    } catch (e: any) {
-      console.error("[ChatPanel] Send error:", e);
-      pushMsg("assistant", `요청 오류: ${String(e?.message ?? e)}`);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
   const canSend = sessionStatus === "ready" && !isSending;
 
   // User ID input screen
@@ -626,8 +502,6 @@ export default function ChatPanel() {
         ref={scrollerRef}
         className="flex-1 overflow-auto p-4 space-y-3 bg-gray-50 cursor-text"
         onClick={handleChatAreaClick}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleFileDrop}
       >
         {messages.map((m, i) => {
           const isUser = m.role === "user";
@@ -660,59 +534,16 @@ export default function ChatPanel() {
         })}
       </div>
 
-      {/* ── 첨부 파일 표시 ── */}
-      {attachedFiles.length > 0 && (
-        <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 flex flex-wrap gap-2">
-          {attachedFiles.map((file, idx) => (
-            <div
-              key={idx}
-              className="flex items-center gap-1.5 bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs"
-            >
-              <Paperclip size={12} />
-              <span className="max-w-[150px] truncate">{file.name}</span>
-              <button
-                onClick={() => removeAttachedFile(idx)}
-                className="hover:text-blue-900"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* ── 입력창 ── */}
       <div className="p-3 border-t border-gray-200 bg-white flex items-center gap-2">
-        {/* 파일 첨부 버튼 */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          multiple
-          className="hidden"
-          accept=".csv,.json,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.pdf"
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={!canSend}
-          className={cn(
-            "h-11 w-11 rounded-full flex items-center justify-center transition-all shrink-0",
-            "border border-gray-300 text-gray-500 hover:bg-gray-100 hover:text-gray-700",
-            "disabled:opacity-50 disabled:cursor-not-allowed"
-          )}
-          title="파일 첨부"
-        >
-          <Paperclip size={18} />
-        </button>
-
         <input
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendWithFiles()}
+          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
           placeholder={
             sessionStatus === "ready"
-              ? "메시지를 입력하세요… (파일 드래그 앤 드롭 가능)"
+              ? "메시지를 입력하세요…"
               : sessionStatus === "creating"
               ? "세션 연결 중…"
               : "세션 오류 – 재연결 후 입력하세요"
@@ -726,8 +557,8 @@ export default function ChatPanel() {
           )}
         />
         <button
-          onClick={sendWithFiles}
-          disabled={!canSend || (!input.trim() && attachedFiles.length === 0)}
+          onClick={send}
+          disabled={!canSend || !input.trim()}
           className={cn(
             "h-11 w-11 rounded-full flex items-center justify-center transition-all shrink-0",
             "bg-blue-500 text-white shadow-md hover:bg-blue-600 hover:shadow-lg",
