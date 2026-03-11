@@ -6,6 +6,21 @@ import pandas as pd
 from google.adk.tools.tool_context import ToolContext
 
 
+# 한국어 CSV 파일에서 자주 사용되는 인코딩 목록 (우선순위 순)
+_ENCODINGS = ["utf-8", "cp949", "euc-kr", "utf-8-sig", "latin1"]
+
+
+def _decode_bytes(data: bytes) -> str:
+    """여러 인코딩을 시도하여 바이트를 문자열로 디코딩합니다."""
+    for enc in _ENCODINGS:
+        try:
+            return data.decode(enc)
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    # 모든 인코딩 실패 시 UTF-8로 강제 (에러 대체)
+    return data.decode("utf-8", errors="replace")
+
+
 async def read_table_artifact(
     filename: str,
     sheet_name: Optional[str] = None,
@@ -38,7 +53,7 @@ async def read_table_artifact(
     ext = os.path.splitext(filename.lower())[1]
 
     if ext in (".csv", ".tsv"):
-        text = data.decode("utf-8", errors="replace")
+        text = _decode_bytes(data)
         sep = delimiter or ("\t" if ext == ".tsv" else ",")
         df = pd.read_csv(
             io.StringIO(text),

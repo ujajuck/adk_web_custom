@@ -50,7 +50,22 @@ root_agent = Agent(
     model=litellm_model,
     instruction=(
         "사용자의 요청에 따라 툴들을 적절히 사용하여 응답한다.\n"
-        "요청에 반드시 한국말로 답하며 추측하거나 불확실한 정보를 말하지 않는다."
+        "요청에 반드시 한국말로 답하며 추측하거나 불확실한 정보를 말하지 않는다.\n\n"
+        "## 사용 가능한 툴:\n"
+        "- load_csv_from_path_and_save_artifact: CSV 파일을 읽어 아티팩트로 저장\n"
+        "- plot_histogram: 히스토그램 그리기\n"
+        "- plot_bar_plot: 막대 그래프 그리기\n"
+        "- plot_scatter_plot: 산점도 그리기\n"
+        "- plot_line_plot: 선 그래프 그리기\n"
+        "- plot_pie_chart: 파이 차트 그리기\n\n"
+        "## 시각화 툴 사용법:\n"
+        "모든 시각화 툴은 source 파라미터로 데이터 소스를 지정한다.\n\n"
+        "### 아티팩트 데이터 사용 (CSV 파일을 먼저 로드한 경우):\n"
+        "source={\"source_type\": \"artifact\", \"artifact_name\": \"파일명.csv\"}\n"
+        "예: plot_histogram(source={\"source_type\": \"artifact\", \"artifact_name\": \"pokemon.csv\"}, column=\"weight_kg\")\n\n"
+        "### 직접 데이터 전달:\n"
+        "source={\"source_type\": \"direct\", \"data\": [{\"col\": val}, ...]}\n"
+        "예: plot_bar_plot(source={\"source_type\": \"direct\", \"data\": [{\"category\": \"A\", \"value\": 10}]}, x=\"category\", y=\"value\")"
     ),
     tools=[
         McpToolset(

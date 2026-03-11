@@ -2,28 +2,38 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
-import { Check } from "lucide-react";
+import { X, Minus, Square } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useWorkspace } from "./WorkspaceContext";
 import CsvTableFromUrlWidget from "@/components/workspace/widgets/CsvTableFromUrlWidget";
+import CsvFileWidget from "@/components/workspace/widgets/CsvFileWidget";
 import PlotlyFigureWidget from "@/components/workspace/widgets/PlotlyFigureWidget";
+import FlowGraphWidget from "@/components/workspace/widgets/FlowGraphWidget";
 import WorkspaceTopBar from "@/components/workspace/WorkspaceTopBar";
 import ServerFilePicker, {
   type ServerFileItem,
 } from "@/components/workspace/ServerFilePicker";
 
 export default function WorkspacePanel() {
-  const { windows, updateWindow, bringToFront, closeWindow } = useWorkspace();
+  const {
+    windows,
+    updateWindow,
+    bringToFront,
+    closeWindow,
+    checkedWidgets,
+  } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
 
+  // Track minimized state and saved sizes
+  const [minimized, setMinimized] = useState<Record<string, boolean>>({});
+  const [savedSizes, setSavedSizes] = useState<Record<string, { w: number; h: number }>>({});
+
   const HEADER_H = 48;
+  const MINIMIZED_HEIGHT = 36;
 
   const isEmpty = useMemo(() => windows.length === 0, [windows.length]);
 
-  // 체크 상태(윈도우별)
-  const [checkedById, setCheckedById] = useState<Record<string, boolean>>({});
-
   const requestBackendToReadFile = (file: ServerFileItem) => {
-    // TODO env로 옮겨라
     const text = `C:\\MyFolder\\data\\${file.name}\n이 파일을 읽어줘`;
 
     window.dispatchEvent(
@@ -37,7 +47,6 @@ export default function WorkspacePanel() {
   };
 
   const onRefresh = () => {
-    // TODO 이벤트 연결
     window.dispatchEvent(new CustomEvent("workspace:refresh"));
   };
 
@@ -45,66 +54,114 @@ export default function WorkspacePanel() {
     window.dispatchEvent(new CustomEvent("workspace:flow"));
   };
 
-  const onSave = () => {
-    window.dispatchEvent(new CustomEvent("workspace:save"));
+
+  // Ctrl+click handler for widget header
+  const handleHeaderClick = (e: React.MouseEvent, win: (typeof windows)[number]) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const artifactName = win.widget.title;
+      window.dispatchEvent(
+        new CustomEvent("chat:insert", {
+          detail: { text: `@${artifactName} `, artifact: artifactName },
+        }),
+      );
+    }
   };
 
-  const toggleCheck = (winId: string) => {
-    setCheckedById((prev) => {
-      const next = !prev[winId];
-
-      // TODO(기능 추가 예정): 체크 상태 변경 시 실행할 함수 연결
-      // 예: markWindowAsReviewed(winId, next)
-      // 예: runFlowOnCheckedWindows(Object.entries({...}).filter(([_, v]) => v))
-      // 예: persistCheckedStateToStorage(winId, next)
-
-      return { ...prev, [winId]: next };
-    });
+  const toggleMinimize = (winId: string, currentW: number, currentH: number) => {
+    const isMinimized = minimized[winId];
+    if (isMinimized) {
+      const saved = savedSizes[winId];
+      if (saved) {
+        updateWindow(winId, { h: saved.h });
+      }
+    } else {
+      setSavedSizes((prev) => ({ ...prev, [winId]: { w: currentW, h: currentH } }));
+      updateWindow(winId, { h: MINIMIZED_HEIGHT });
+    }
+    setMinimized((prev) => ({ ...prev, [winId]: !isMinimized }));
   };
+
+  const toggleMaximize = (winId: string, currentW: number, currentH: number) => {
+    const bounds = boundsRef.current;
+    if (!bounds) return;
+
+    const maxW = bounds.clientWidth - 20;
+    const maxH = bounds.clientHeight - HEADER_H - 20;
+
+    const win = windows.find((w) => w.id === winId);
+    if (!win) return;
+
+    const isMaximized = win.w >= maxW - 50 && win.h >= maxH - 50;
+
+    if (isMaximized) {
+      const saved = savedSizes[winId];
+      if (saved) {
+        updateWindow(winId, { w: saved.w, h: saved.h, x: 20, y: 20 });
+      }
+    } else {
+      setSavedSizes((prev) => ({ ...prev, [winId]: { w: currentW, h: currentH } }));
+      updateWindow(winId, { w: maxW, h: maxH, x: 10, y: 10 });
+    }
+    setMinimized((prev) => ({ ...prev, [winId]: false }));
+  };
+
+  function renderWidget(win: (typeof windows)[number]) {
+    const w = win.widget;
+    switch (w.type) {
+      case "tableUrl":
+        return <CsvTableFromUrlWidget src={w.src} />;
+      case "csvFile":
+        return <CsvFileWidget fileId={w.fileId} artifactName={w.title} />;
+      case "plotly":
+        return <PlotlyFigureWidget fig={w.fig} />;
+      case "flowGraph":
+        return (
+          <FlowGraphWidget
+            sessionId={w.sessionId}
+            checkedWidgets={checkedWidgets}
+            allWindows={windows}
+          />
+        );
+      default:
+        return (
+          <div className="p-3 text-muted-foreground">unknown widget</div>
+        );
+    }
+  }
 
   return (
     <div
       ref={boundsRef}
-      style={{
-        position: "relative",
-        height: "100%",
-        minHeight: "100dvh",
-        overflow: "hidden",
-        background: "#fafafa",
-      }}
+      className="relative h-full min-h-dvh overflow-hidden bg-slate-100"
     >
-      {/* 침범 불가 상단 헤더 */}
       <WorkspaceTopBar
         height={HEADER_H}
         onRefresh={onRefresh}
         onFlow={onFlow}
-        onSave={onSave}
       />
 
-      {/* 헤더 아래가 "parent"가 되도록 본문 컨테이너 분리 */}
       <div
+        className="relative overflow-hidden"
         style={{
-          position: "relative",
           height: `calc(100% - ${HEADER_H}px)`,
           minHeight: `calc(100dvh - ${HEADER_H}px)`,
-          overflow: "hidden",
         }}
       >
-        {/* windows가 없을 때 파일 선택 UI */}
         <ServerFilePicker
           enabled={isEmpty}
           onSelect={requestBackendToReadFile}
         />
 
-        {/* 윈도우들 */}
         {windows.map((win) => {
-          const checked = Boolean(checkedById[win.id]);
+          const isMin = minimized[win.id];
 
           return (
             <Rnd
               key={win.id}
               bounds="parent"
-              size={{ width: win.w, height: win.h }}
+              size={{ width: win.w, height: isMin ? MINIMIZED_HEIGHT : win.h }}
               position={{ x: win.x, y: win.y }}
               onDragStart={() => bringToFront(win.id)}
               onResizeStart={() => bringToFront(win.id)}
@@ -117,93 +174,71 @@ export default function WorkspacePanel() {
                   y: pos.y,
                 });
               }}
-              style={{
-                zIndex: win.z,
-                border: "1px solid #e5e7eb",
-                borderRadius: 12,
-                background: "white",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-                overflow: "hidden",
-              }}
-              minWidth={360}
-              minHeight={240}
+              style={{ zIndex: win.z }}
+              className="rounded border bg-card shadow-md overflow-hidden"
+              minWidth={200}
+              minHeight={MINIMIZED_HEIGHT}
               dragHandleClassName="ws-window-handle"
+              enableResizing={!isMin}
             >
+              {/* window title bar */}
               <div
-                className="ws-window-handle"
-                style={{
-                  height: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "0 10px",
-                  borderBottom: "1px solid #e5e7eb",
-                  cursor: "grab",
-                  userSelect: "none",
-                  background: "#fff",
-                }}
+                className="ws-window-handle h-9 flex items-center gap-1 px-2 border-b bg-slate-50 cursor-grab select-none"
                 onMouseDown={() => bringToFront(win.id)}
+                onClick={(e) => handleHeaderClick(e, win)}
               >
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 13,
-                    flex: 1,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
+                <span
+                  className={cn(
+                    "font-semibold text-xs flex-1 truncate text-slate-700",
+                    "hover:text-blue-600 transition-colors",
+                  )}
+                  title="Ctrl+클릭으로 채팅에 참조 추가"
                 >
                   {win.widget.title}
-                </div>
+                </span>
 
-                {/* 체크 토글 버튼 */}
+                {/* minimize */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleCheck(win.id);
+                    toggleMinimize(win.id, win.w, win.h);
                   }}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 30,
-                    height: 30,
-                    borderRadius: 10,
-                    border: "1px solid #e5e7eb",
-                    background: checked ? "white" : "#16a34a",
-                    cursor: "pointer",
-                    color: checked ? "#16a34a" : "#e5e7eb",
-                  }}
-                  aria-label={checked ? "체크 해제" : "체크"}
-                  title={checked ? "체크 해제" : "체크"}
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 transition-colors"
+                  title={isMin ? "복원" : "최소화"}
                 >
-                  <Check size={16} />
+                  <Minus size={12} />
                 </button>
 
+                {/* maximize */}
                 <button
-                  onClick={() => closeWindow(win.id)}
-                  style={{
-                    border: "1px solid #e5e7eb",
-                    background: "white",
-                    borderRadius: 10,
-                    padding: "6px 10px",
-                    cursor: "pointer",
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleMaximize(win.id, win.w, win.h);
                   }}
-                  aria-label="창 닫기"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 transition-colors"
+                  title="최대화/복원"
+                >
+                  <Square size={10} />
+                </button>
+
+                {/* close */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeWindow(win.id);
+                  }}
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 hover:text-red-600 text-slate-500 transition-colors"
                   title="닫기"
                 >
-                  ✕
+                  <X size={12} />
                 </button>
               </div>
 
-              <div style={{ height: `calc(100% - 40px)`, overflow: "auto" }}>
-                {win.widget.type === "tableUrl" ? (
-                  <CsvTableFromUrlWidget src={win.widget.src} />
-                ) : (
-                  <PlotlyFigureWidget fig={win.widget.fig} />
-                )}
-              </div>
+              {!isMin && (
+                <div className="h-[calc(100%-36px)] overflow-auto">
+                  {renderWidget(win)}
+                </div>
+              )}
             </Rnd>
           );
         })}

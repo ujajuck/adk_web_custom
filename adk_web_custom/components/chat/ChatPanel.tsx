@@ -1,11 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import { Send, Loader2, AlertCircle, RefreshCw, Save, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
-import { extractArtifactDelta } from "@/components/chat/extractArtifactDelta";
 import type { Msg } from "@/components/chat/adkTypes";
-import { extractAdkAssistantText } from "@/components/chat/adkParsers";
-import { tryExtractPlotlyFig } from "@/components/chat/plotlyParsers";
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8080";
+
+type SessionStatus = "idle" | "input_user" | "creating" | "ready" | "error";
 
 type WorkspaceSendDetail = {
   text: string;
@@ -13,16 +25,21 @@ type WorkspaceSendDetail = {
 };
 
 export default function ChatPanel() {
-  const { addPlotlyWindow, addCsvTableWindow } = useWorkspace();
+  const { addPlotlyWindow, addCsvFileWindow, addFlowGraphWindow } = useWorkspace();
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
 
-  const [userId, setUserId] = useState<string>("");
-  const [sessionId, setSessionId] = useState<string>("");
+  const [userIdInput, setUserIdInput] = useState("");
+  const [userId, setUserId] = useState("");
+  const [sessionId, setSessionId] = useState("");
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("input_user");
 
   const [isSending, setIsSending] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const creatingRef = useRef(false);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -30,173 +47,223 @@ export default function ChatPanel() {
     el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  const hasSession = useMemo(
-    () => Boolean(userId && sessionId),
-    [userId, sessionId],
-  );
+  function pushMsg(role: Msg["role"], text: string) {
+    setMessages((m) => [...m, { role, text }]);
+  }
 
-  const createSession = useCallback(async () => {
-    const id = `user_${Date.now()}`;
+  const createSession = useCallback(async (inputUserId: string) => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
 
-    setUserId(id);
-    setSessionId(id);
-    setMessages((m) => [
-      ...m,
-      { role: "assistant", text: `세션 생성 중… (${id})` },
-    ]);
+    const sessionIdVal = `${inputUserId}_${Date.now()}`;
+    setSessionStatus("creating");
+    setMessages([{ role: "assistant", text: "세션 생성 중…" }]);
 
-    const res = await fetch("/api/adk/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userId: id, sessionId: id }),
-    });
+    try {
+      const reqBody = {
+        user_id: inputUserId,
+        session_id: sessionIdVal,
+        session_name: "",
+      };
+      console.log("[ChatPanel] Creating session:", API_URL, reqBody);
 
-    const json = await res.json().catch(() => null);
+      const res = await fetch(`${API_URL}/api/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      });
 
-    if (json?.ok !== true) {
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: `세션 생성 실패: upstream=${json?.status ?? "?"} / ${json?.data?.detail ?? json?.error ?? "unknown"}`,
-        },
-      ]);
+      const text = await res.text();
+      console.log("[ChatPanel] Session response:", res.status, text);
 
-      setUserId("");
-      setSessionId("");
-      throw new Error("session create failed");
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`Invalid JSON: ${text.slice(0, 200)}`);
+      }
+
+      if (!res.ok || !json?.session_id) {
+        throw new Error(json?.detail ?? `HTTP ${res.status}`);
+      }
+
+      setUserId(inputUserId);
+      setSessionId(sessionIdVal);
+      setSessionStatus("ready");
+      setMessages([{ role: "assistant", text: `세션 준비됨 · ${inputUserId}` }]);
+
+      // Emit event to load notebooks
+      window.dispatchEvent(new CustomEvent("notebook:load", { detail: { userId: inputUserId } }));
+    } catch (e: any) {
+      console.error("[ChatPanel] Session error:", e);
+      setSessionStatus("error");
+      setMessages([{ role: "assistant", text: `세션 생성 실패: ${String(e?.message ?? e)}` }]);
+    } finally {
+      creatingRef.current = false;
     }
-
-    setMessages((m) => [
-      ...m,
-      { role: "assistant", text: `세션 생성됨: ${id}` },
-    ]);
-    return { userId: id, sessionId: id };
   }, []);
 
-  // 세션이 없으면 자동 생성 (최초 진입 시)
-  useEffect(() => {
-    if (hasSession) return;
-    void createSession();
-  }, [hasSession, createSession]);
-
-  // send 전에 세션을 보장
-  const ensureSession = useCallback(async () => {
-    if (hasSession) return { userId, sessionId };
-    return await createSession();
-  }, [hasSession, userId, sessionId, createSession]);
+  const handleStartSession = () => {
+    const trimmed = userIdInput.trim();
+    if (!trimmed) return;
+    createSession(trimmed);
+  };
 
   const sendTextToAdk = useCallback(
     async (text: string) => {
       const t = text.trim();
-      if (!t) return;
-      if (isSending) return;
+      if (!t || isSending) return;
+
+      if (!userId || !sessionId) {
+        pushMsg("assistant", "세션이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.");
+        return;
+      }
 
       setIsSending(true);
-
-      const sess = await ensureSession();
-
-      setMessages((m) => [...m, { role: "user", text: t }]);
+      pushMsg("user", t);
       setInput("");
 
       try {
-        const res = await fetch("/api/adk", {
+        const reqBody = {
+          user_id: userId,
+          session_id: sessionId,
+          message: t,
+        };
+        console.log("[ChatPanel] Sending chat:", API_URL, reqBody);
+
+        const res = await fetch(`${API_URL}/api/chat`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            userId: sess.userId,
-            sessionId: sess.sessionId,
-            newMessage: { role: "user", parts: [{ text: t }] },
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody),
         });
 
-        const json = await res.json().catch(() => null);
-        console.log(json);
+        const responseText = await res.text();
+        console.log("[ChatPanel] Chat response:", res.status, responseText.slice(0, 500));
 
-        const events = json?.data;
-        const delta = extractArtifactDelta(events);
-
-        for (const [filename, version] of Object.entries(delta)) {
-          const params = new URLSearchParams({
-            userId: sess.userId,
-            sessionId: sess.sessionId,
-            filename,
-            version: String(version),
-          });
-
-          const pubApp = (process.env.ADK_APP_NAME ?? "").trim();
-          if (pubApp) params.set("appName", pubApp);
-
-          const csvUrl = `/api/adk/artifacts/csv?${params.toString()}`;
-          console.log("[csvUrl]", csvUrl);
-
-          addCsvTableWindow(`CSV: ${filename} (v${version})`, csvUrl);
-          setMessages((m) => [
-            ...m,
-            {
-              role: "assistant",
-              text: `📄 CSV 테이블을 워크스페이스에 열었어요: ${filename} v${version}`,
-            },
-          ]);
+        let json: any = null;
+        try {
+          json = JSON.parse(responseText);
+        } catch {
+          pushMsg("assistant", `응답 파싱 실패: ${responseText.slice(0, 200)}`);
+          return;
         }
 
-        const foundFig = tryExtractPlotlyFig(events);
-        console.log("그래프 찾음 ", foundFig);
-        if (foundFig) {
-          addPlotlyWindow(foundFig.title, foundFig.fig);
-          setMessages((m) => [
-            ...m,
-            {
-              role: "assistant",
-              text: `📈 그래프를 워크스페이스에 열었어요: ${foundFig.title}`,
-            },
-          ]);
+        if (!res.ok) {
+          pushMsg(
+            "assistant",
+            `요청 실패 (${res.status}): ${JSON.stringify(json?.detail ?? json)}`,
+          );
+          return;
         }
 
-        const assistantText = extractAdkAssistantText(events);
-        if (assistantText) {
-          setMessages((m) => [
-            ...m,
-            { role: "assistant", text: assistantText },
-          ]);
-        } else if (!foundFig) {
-          setMessages((m) => [
-            ...m,
-            {
-              role: "assistant",
-              text: `응답 파싱 실패(텍스트 없음)\n${JSON.stringify(events, null, 2)}`,
-            },
-          ]);
+        // 새 응답 포맷: { status, outputs: [{ type, uri, mime_type }], text?, tool_name? }
+        const outputs: Array<{ type: string; uri: string; mime_type?: string }> =
+          json?.outputs ?? [];
+        const toolName: string = json?.tool_name ?? "";
+        const isPlottingTool = toolName.startsWith("plotting");
+
+        for (const out of outputs) {
+          if (out.type !== "resource_link") continue;
+
+          const uri = out.uri ?? "";
+          const mime = out.mime_type ?? "";
+
+          // CSV/JSON은 백엔드에서 처리 후 csv_files/plotly_figs로 전달되므로 여기서 스킵
+          if (uri.endsWith(".csv") || mime === "text/csv") continue;
+          if (uri.endsWith(".json") || mime === "application/json") continue;
+
+          // 이미지 등 다른 리소스는 메시지로만 안내
+          if (mime.startsWith("image/")) {
+            pushMsg("assistant", `이미지 생성됨: ${uri}`);
+          }
+        }
+
+        // 백엔드에서 처리된 csv_files 처리
+        const csvFiles: Array<{ file_id: string; filename: string }> =
+          json?.csv_files ?? [];
+        for (const csv of csvFiles) {
+          if (csv.file_id && csv.filename) {
+            addCsvFileWindow(csv.filename, csv.file_id);
+            pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${csv.filename}`);
+          }
+        }
+
+        // 백엔드에서 처리된 plotly_figs 처리 (fig 데이터 포함됨)
+        const plotlyFigs: Array<{ fig_id: string; title: string; fig: any }> =
+          json?.plotly_figs ?? [];
+        for (const pf of plotlyFigs) {
+          if (pf.fig && pf.title) {
+            addPlotlyWindow(pf.title, pf.fig);
+            pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${pf.title}`);
+          }
+        }
+
+        // Assistant text
+        const hasWidgets = csvFiles.length > 0 || plotlyFigs.length > 0 || outputs.length > 0;
+        if (json?.text) {
+          pushMsg("assistant", json.text);
+        } else if (!hasWidgets) {
+          pushMsg(
+            "assistant",
+            `응답 없음\n${JSON.stringify(json, null, 2)}`,
+          );
         }
       } catch (e: any) {
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", text: `요청 실패: ${String(e?.message ?? e)}` },
-        ]);
+        console.error("[ChatPanel] Chat error:", e);
+        pushMsg("assistant", `요청 오류: ${String(e?.message ?? e)}`);
       } finally {
         setIsSending(false);
       }
     },
-    [isSending, ensureSession, addCsvTableWindow, addPlotlyWindow],
+    [isSending, userId, sessionId, addCsvFileWindow, addPlotlyWindow],
   );
 
-  async function send() {
-    await sendTextToAdk(input);
+  function send() {
+    void sendTextToAdk(input);
   }
 
-  // WorkspacePanel에서 보낸 이벤트(adk:chat:send)를 받아서 /api/adk로 전송
+  const saveNotebook = useCallback(async () => {
+    if (!userId || !sessionId || messages.length === 0) return;
+
+    setIsSaving(true);
+    try {
+      const title = `대화 ${new Date().toLocaleString("ko-KR")}`;
+      const res = await fetch(`${API_URL}/api/notebooks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          session_id: sessionId,
+          title,
+          messages,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const notebook = await res.json();
+      pushMsg("assistant", `노트북 저장됨: ${notebook.title}`);
+
+      // Emit event to refresh notebook list
+      window.dispatchEvent(new CustomEvent("notebook:refresh", { detail: { userId } }));
+    } catch (e: any) {
+      console.error("[ChatPanel] Save error:", e);
+      pushMsg("assistant", `저장 실패: ${String(e?.message ?? e)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [userId, sessionId, messages]);
+
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<WorkspaceSendDetail>;
       const detail = ce.detail;
-
       const baseText = (detail?.text ?? "").trim();
       if (!baseText) return;
 
-      // fileName이 있으면 텍스트에 확실히 포함(툴 파싱 안정화)
-      const fileNameLine = detail.fileName
-        ? `파일명: ${detail.fileName}\n`
-        : "";
+      const fileNameLine = detail.fileName ? `파일명: ${detail.fileName}\n` : "";
       const finalText =
         fileNameLine && !baseText.includes("파일명:")
           ? `${fileNameLine}${baseText}`
@@ -209,134 +276,301 @@ export default function ChatPanel() {
     return () => window.removeEventListener("adk:chat:send", handler);
   }, [sendTextToAdk]);
 
-  if (!hasSession) {
+  // Listen for flow graph request
+  useEffect(() => {
+    const handler = () => {
+      if (sessionId) {
+        addFlowGraphWindow("Artifact Flow", sessionId);
+      } else {
+        pushMsg("assistant", "세션이 아직 준비되지 않았습니다.");
+      }
+    };
+
+    window.addEventListener("workspace:flow", handler);
+    return () => window.removeEventListener("workspace:flow", handler);
+  }, [sessionId, addFlowGraphWindow]);
+
+  // Listen for notebook selection (load history)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{
+        notebook: {
+          notebook_id: string;
+          user_id: string;
+          session_id: string;
+          title: string;
+          messages: Array<{ role: string; text: string }>;
+        };
+      }>;
+      const nb = ce.detail?.notebook;
+      if (nb?.messages) {
+        setMessages(nb.messages as Msg[]);
+        pushMsg("assistant", `노트북 "${nb.title}" 불러옴 (읽기 전용)`);
+      }
+    };
+
+    window.addEventListener("notebook:select", handler);
+    return () => window.removeEventListener("notebook:select", handler);
+  }, []);
+
+  // Listen for notebook:add events (from FlowWidget save)
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const ce = e as CustomEvent<{
+        type: string;
+        sessionId: string;
+        data: any;
+        selectedArtifacts: string[];
+        title: string;
+      }>;
+      const { selectedArtifacts, title } = ce.detail || {};
+
+      if (!userId || !sessionId) {
+        pushMsg("assistant", "세션이 아직 준비되지 않았습니다.");
+        return;
+      }
+
+      // Filter messages to only include those related to selected artifacts
+      let filteredMessages = messages;
+      if (selectedArtifacts && selectedArtifacts.length > 0) {
+        filteredMessages = messages.filter((msg) =>
+          selectedArtifacts.some((artifact) =>
+            msg.text.toLowerCase().includes(artifact.toLowerCase())
+          )
+        );
+        // If no messages match, include all
+        if (filteredMessages.length === 0) {
+          filteredMessages = messages;
+        }
+      }
+
+      try {
+        const notebookTitle = title || `Flow ${new Date().toLocaleString("ko-KR")}`;
+        const res = await fetch(`${API_URL}/api/notebooks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            session_id: sessionId,
+            title: notebookTitle,
+            messages: filteredMessages,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const notebook = await res.json();
+        pushMsg("assistant", `노트북 저장됨: ${notebook.title} (${selectedArtifacts?.length || 0}개 아티팩트)`);
+        window.dispatchEvent(new CustomEvent("notebook:refresh", { detail: { userId } }));
+      } catch (e: any) {
+        console.error("[ChatPanel] Notebook add error:", e);
+        pushMsg("assistant", `저장 실패: ${String(e?.message ?? e)}`);
+      }
+    };
+
+    window.addEventListener("notebook:add", handler);
+    return () => window.removeEventListener("notebook:add", handler);
+  }, [userId, sessionId, messages]);
+
+  // Listen for chat:insert events (from Ctrl+click on widgets/columns)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ text: string; artifact?: string; column?: string }>;
+      const { text, artifact } = ce.detail || {};
+      if (text) {
+        setInput((prev) => prev + text);
+        inputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("chat:insert", handler);
+    return () => window.removeEventListener("chat:insert", handler);
+  }, []);
+
+  // Click anywhere on chat area to focus input
+  const handleChatAreaClick = () => {
+    if (sessionStatus === "ready") {
+      inputRef.current?.focus();
+    }
+  };
+
+  const canSend = sessionStatus === "ready" && !isSending;
+
+  // User ID input screen
+  if (sessionStatus === "input_user" || sessionStatus === "idle") {
     return (
-      <div
-        style={{
-          height: "100%",
-          display: "grid",
-          placeItems: "center",
-          padding: 12,
-          color: "#6b7280",
-        }}
-      >
-        세션 준비 중…
+      <div className="h-full flex flex-col bg-white">
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="w-full max-w-sm space-y-4">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <User size={32} className="text-blue-500" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-800">사용자 ID 입력</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                ID를 입력하면 저장된 노트북을 불러옵니다
+              </p>
+            </div>
+            <div className="space-y-3">
+              <input
+                value={userIdInput}
+                onChange={(e) => setUserIdInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleStartSession()}
+                placeholder="사용자 ID (예: hong_analyst)"
+                className={cn(
+                  "w-full h-12 px-4 rounded-lg border text-sm transition-all",
+                  "bg-gray-50 border-gray-300 placeholder:text-gray-400",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white"
+                )}
+              />
+              <button
+                onClick={handleStartSession}
+                disabled={!userIdInput.trim()}
+                className={cn(
+                  "w-full h-12 rounded-lg font-medium text-sm transition-all",
+                  "bg-blue-500 text-white hover:bg-blue-600",
+                  "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                )}
+              >
+                시작하기
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "grid",
-        gridTemplateRows: "auto 1fr auto",
-      }}
-    >
-      {/* 상단: 세션 표시 */}
-      <div
-        style={{
-          padding: "10px 12px",
-          borderBottom: "1px solid #e5e7eb",
-          background: "#fafafa",
-          fontSize: 12,
-          color: "#6b7280",
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-        }}
-      >
-        <span>session:</span>
-        <code
-          style={{
-            padding: "2px 6px",
-            background: "white",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-          }}
-        >
-          {sessionId}
-        </code>
-        <div style={{ flex: 1 }} />
-        {isSending && <span>전송 중…</span>}
+    <div className="h-full flex flex-col bg-white">
+      {/* ── 상단: 세션 상태 ── */}
+      <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-2 min-h-[44px]">
+        {sessionStatus === "ready" && (
+          <>
+            <User size={12} className="text-gray-400" />
+            <span className="font-mono text-xs text-gray-600 truncate max-w-[120px]">
+              {userId}
+            </span>
+          </>
+        )}
+        {sessionStatus === "creating" && (
+          <span className="text-xs text-gray-500 flex items-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" />
+            세션 연결 중…
+          </span>
+        )}
+        {sessionStatus === "error" && (
+          <span className="text-xs text-red-600 flex items-center gap-1.5">
+            <AlertCircle size={12} />
+            세션 오류
+          </span>
+        )}
+        <div className="flex-1" />
+        {sessionStatus === "error" && (
+          <button
+            className="h-7 px-2.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md flex items-center gap-1 transition-colors"
+            onClick={() => {
+              setSessionStatus("input_user");
+            }}
+          >
+            <RefreshCw size={12} />
+            재시작
+          </button>
+        )}
+        {sessionStatus === "ready" && (
+          <button
+            className="h-7 px-2.5 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md flex items-center gap-1 transition-colors disabled:opacity-50"
+            onClick={saveNotebook}
+            disabled={isSaving || messages.length === 0}
+          >
+            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+            저장
+          </button>
+        )}
+        {isSending && (
+          <span className="text-xs text-blue-600 flex items-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" />
+            전송 중…
+          </span>
+        )}
       </div>
 
-      {/* 메시지 영역 */}
-      <div ref={scrollerRef} style={{ padding: 12, overflow: "auto" }}>
+      {/* ── 메시지 목록 ── */}
+      <div
+        ref={scrollerRef}
+        className="flex-1 overflow-auto p-4 space-y-3 bg-gray-50 cursor-text"
+        onClick={handleChatAreaClick}
+      >
         {messages.map((m, i) => {
           const isUser = m.role === "user";
-
           return (
             <div
               key={i}
-              style={{
-                display: "flex",
-                justifyContent: isUser ? "flex-end" : "flex-start",
-                marginBottom: 10,
-              }}
+              className={cn("flex", isUser ? "justify-end" : "justify-start")}
             >
               <div
-                style={{
-                  maxWidth: "78%",
-                  padding: "10px 14px",
-                  borderRadius: 16,
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.45,
-                  fontSize: 14,
-                  background: isUser ? "#2563eb" : "#f3f4f6",
-                  color: isUser ? "white" : "#111827",
-                  borderTopRightRadius: isUser ? 4 : 16,
-                  borderTopLeftRadius: isUser ? 16 : 4,
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
-                }}
+                className={cn(
+                  "max-w-[80%] px-4 py-2.5 text-sm leading-relaxed",
+                  isUser
+                    ? "bg-blue-500 text-white rounded-2xl rounded-br-md shadow-md whitespace-pre-wrap"
+                    : "bg-white text-gray-800 rounded-2xl rounded-bl-md shadow-sm border border-gray-200",
+                )}
               >
-                {m.text}
+                {isUser ? (
+                  m.text
+                ) : (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded"
+                  >
+                    {m.text}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* 입력 영역 */}
-      <div
-        style={{
-          padding: 12,
-          borderTop: "1px solid #e5e7eb",
-          display: "flex",
-          gap: 8,
-          background: "#fafafa",
-        }}
-      >
+      {/* ── 입력창 ── */}
+      <div className="p-3 border-t border-gray-200 bg-white flex items-center gap-2">
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          style={{
-            flex: 1,
-            padding: "12px 14px",
-            borderRadius: 14,
-            border: "1px solid #e5e7eb",
-            outline: "none",
-            fontSize: 14,
-            background: "white",
-          }}
-          placeholder="메시지를 입력하세요…"
-          disabled={isSending}
+          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+          placeholder={
+            sessionStatus === "ready"
+              ? "메시지를 입력하세요…"
+              : sessionStatus === "creating"
+              ? "세션 연결 중…"
+              : "세션 오류 – 재연결 후 입력하세요"
+          }
+          disabled={!canSend}
+          className={cn(
+            "flex-1 h-11 px-4 rounded-full border text-sm transition-all",
+            "bg-gray-50 border-gray-300 placeholder:text-gray-400",
+            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white",
+            "disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+          )}
         />
         <button
           onClick={send}
-          disabled={isSending}
-          style={{
-            padding: "0 16px",
-            borderRadius: 14,
-            border: "none",
-            background: isSending ? "#93c5fd" : "#2563eb",
-            color: "white",
-            fontWeight: 700,
-            cursor: isSending ? "not-allowed" : "pointer",
-          }}
+          disabled={!canSend || !input.trim()}
+          className={cn(
+            "h-11 w-11 rounded-full flex items-center justify-center transition-all shrink-0",
+            "bg-blue-500 text-white shadow-md hover:bg-blue-600 hover:shadow-lg",
+            "active:scale-95",
+            "disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none disabled:cursor-not-allowed"
+          )}
         >
-          전송
+          {isSending ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Send size={18} />
+          )}
         </button>
       </div>
     </div>

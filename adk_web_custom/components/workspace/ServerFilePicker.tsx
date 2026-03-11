@@ -1,11 +1,17 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
-export type ServerFileItem = { name: string; url: string };
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8080";
+
+export type ServerFileItem = { name: string; url?: string; size?: number };
 
 export default function ServerFilePicker(props: {
-  enabled: boolean; // windows.length === 0 일 때만 true
+  enabled: boolean;
   onSelect: (file: ServerFileItem) => void;
 }) {
   const [files, setFiles] = useState<ServerFileItem[]>([]);
@@ -17,7 +23,7 @@ export default function ServerFilePicker(props: {
       setFilesErr("");
       setLoadingFiles(true);
 
-      const res = await fetch("/api/adk/workspace/files", {
+      const res = await fetch(`${API_URL}/api/files`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -39,7 +45,6 @@ export default function ServerFilePicker(props: {
     }
   };
 
-  // enabled 일 때만 자동 로드
   useEffect(() => {
     if (!props.enabled) return;
     void loadFiles();
@@ -49,90 +54,53 @@ export default function ServerFilePicker(props: {
   if (!props.enabled) return null;
 
   return (
-    <div style={{ padding: 24, color: "#6b7280" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 10,
-        }}
-      >
-        <div style={{ fontWeight: 800, color: "#111827" }}>서버 파일 목록</div>
+    <div className="p-6 text-muted-foreground">
+      <div className="flex items-center gap-2.5 mb-3">
+        <h2 className="font-extrabold text-foreground">서버 파일 목록</h2>
       </div>
 
-      {loadingFiles && <div>불러오는 중...</div>}
+      {loadingFiles && <p>불러오는 중...</p>}
 
       {filesErr && (
-        <div style={{ color: "#b91c1c", whiteSpace: "pre-wrap" }}>
-          {filesErr}
-        </div>
+        <p className="text-destructive whitespace-pre-wrap">{filesErr}</p>
       )}
 
       {!loadingFiles && !filesErr && files.length === 0 && (
-        <div>지정 폴더에 파일이 없습니다.</div>
+        <p>지정 폴더에 파일이 없습니다.</p>
       )}
 
       {!loadingFiles && !filesErr && files.length > 0 && (
-        <div style={{ display: "grid", gap: 10, marginTop: 12, maxWidth: 720 }}>
+        <div className="grid gap-2.5 mt-3 max-w-[720px]">
           {files.map((f) => (
-            <div
+            <Card
               key={f.name}
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 12,
-                background: "white",
-                padding: 12,
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-              }}
+              className="p-3 flex items-center gap-3"
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="flex-1 min-w-0">
                 <div
-                  style={{
-                    fontWeight: 700,
-                    color: "#111827",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
+                  className="font-bold text-sm text-card-foreground truncate"
                   title={f.name}
                 >
                   {f.name}
                 </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    marginTop: 4,
-                    color: "#6b7280",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                  title={f.url}
-                >
-                  {f.url}
-                </div>
+                {f.size != null && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {(f.size / 1024).toFixed(1)} KB
+                  </div>
+                )}
               </div>
 
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => props.onSelect(f)}
-                style={{
-                  border: "1px solid #e5e7eb",
-                  background: "white",
-                  borderRadius: 10,
-                  padding: "8px 12px",
-                  cursor: "pointer",
-                  fontWeight: 800,
-                  letterSpacing: 0.2,
-                }}
                 aria-label="파일 선택"
                 title="파일 선택"
+                className="font-extrabold tracking-wide"
               >
                 SELECT
-              </button>
-            </div>
+              </Button>
+            </Card>
           ))}
         </div>
       )}

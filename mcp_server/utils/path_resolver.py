@@ -17,6 +17,48 @@ MCP_RESOURCE_ROOT = os.environ.get("MCP_RESOURCE_ROOT")
 # -----------------------------
 # ADK Artifact path resolver
 # -----------------------------
+def get_artifact_path(
+    user_id: str,
+    session_id: str,
+    artifact_name: str,
+    version: int = 0,
+) -> str:
+    """ADK 아티팩트의 실제 파일 경로를 반환합니다.
+
+    Args:
+        user_id: 사용자 ID
+        session_id: 세션 ID
+        artifact_name: 아티팩트 파일명
+        version: 아티팩트 버전 (기본값 0)
+
+    Returns:
+        아티팩트 파일의 절대 경로
+
+    Raises:
+        ValueError: ADK_ARTIFACT_ROOT가 설정되지 않은 경우
+    """
+    if not ADK_ARTIFACT_ROOT:
+        raise ValueError("ADK_ARTIFACT_ROOT 환경변수가 설정되지 않았습니다.")
+
+    root = Path(ADK_ARTIFACT_ROOT).resolve()
+    path = (
+        root
+        / "users"
+        / user_id
+        / "sessions"
+        / session_id
+        / "artifacts"
+        / artifact_name
+        / "versions"
+        / str(version)
+        / artifact_name
+    ).resolve()
+
+    # path traversal 방어
+    if root not in path.parents and path != root:
+        raise ValueError("잘못된 artifact 경로입니다.")
+
+    return str(path)
 
 def resolve_artifact_path(artifact_locator: Dict[str, Any]) -> str:
     """artifact_locator(dict) -> ADK 공용 저장소 내 실제 파일 절대경로(str)
@@ -46,6 +88,7 @@ def resolve_artifact_path(artifact_locator: Dict[str, Any]) -> str:
     root = Path(ADK_ARTIFACT_ROOT).resolve()
     path = (
         root
+        / "users"
         / "user"
         / "sessions"
         / session_id

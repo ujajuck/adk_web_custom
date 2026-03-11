@@ -2,14 +2,16 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import MenuPanel from "@/components/menu/MenuPanel";
 import ChatPanel from "@/components/chat/ChatPanel";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
-  const [rightWidth, setRightWidth] = useState(420);
+  const [rightWidth, setRightWidth] = useState(480);
 
-  const leftWidth = isLeftCollapsed ? 0 : 320;
+  const leftWidth = isLeftCollapsed ? 48 : 260;
 
   const draggingRef = useRef<null | "right">(null);
 
@@ -46,65 +48,53 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div style={{ position: "relative" }}>
-      {/*“펼치기” 고정 버튼 */}
-      {isLeftCollapsed && (
-        <button
-          onClick={() => setIsLeftCollapsed(false)}
-          aria-label="메뉴 펼치기"
-          title="메뉴 펼치기"
-          style={{
-            position: "fixed",
-            left: 12,
-            bottom: 12,
-            zIndex: 50,
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #e5e7eb",
-            background: "white",
-            boxShadow: "0 6px 20px rgba(0,0,0,0.08)",
-            cursor: "pointer",
-          }}
-        >
-          ☰ 메뉴
-        </button>
-      )}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `${leftWidth}px minmax(0, 1fr) 6px ${rightWidth}px`,
-          height: "100dvh",
-        }}
+    <div
+      className="h-dvh"
+      style={{
+        display: "grid",
+        gridTemplateColumns: `${leftWidth}px minmax(0, 1fr) 6px ${rightWidth}px`,
+      }}
+    >
+      {/* 왼쪽: 메뉴 */}
+      <aside
+        className={cn(
+          "overflow-hidden border-r bg-slate-50",
+        )}
       >
-        {/* 왼쪽: 메뉴 */}
-        <aside
-          style={{
-            borderRight: leftWidth ? "1px solid #e5e7eb" : "none",
-            overflow: "hidden",
-          }}
-        >
+        {isLeftCollapsed ? (
+          <div className="h-full flex flex-col">
+            <div className="px-2 py-3 border-b bg-white flex justify-center">
+              <button
+                onClick={() => setIsLeftCollapsed(false)}
+                className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                title="메뉴 펼치기"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
+        ) : (
           <MenuPanel
             collapsed={isLeftCollapsed}
             onCollapse={() => setIsLeftCollapsed(true)}
           />
-        </aside>
+        )}
+      </aside>
 
-        {/* 가운데 */}
-        <main style={{ overflow: "auto" }}>{children}</main>
+      {/* 가운데 */}
+      <main className="overflow-auto">{children}</main>
 
-        {/* 오른쪽 리사이즈 바 */}
-        <div
-          onMouseDown={onRightDragStart}
-          title="드래그해서 채팅 폭 조절"
-          style={{ cursor: "col-resize", background: "#e5e7eb" }}
-        />
+      {/* 오른쪽 리사이즈 바 */}
+      <div
+        onMouseDown={onRightDragStart}
+        title="드래그해서 채팅 폭 조절"
+        className="cursor-col-resize bg-border hover:bg-ring/30 transition-colors"
+      />
 
-        {/* 오른쪽: 채팅 */}
-        <aside style={{ borderLeft: "1px solid #e5e7eb", overflow: "hidden" }}>
-          <ChatPanel />
-        </aside>
-      </div>
+      {/* 오른쪽: 채팅 */}
+      <aside className="border-l overflow-hidden">
+        <ChatPanel />
+      </aside>
     </div>
   );
 }
