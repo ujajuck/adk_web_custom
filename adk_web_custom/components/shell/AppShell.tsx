@@ -31,7 +31,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     function onMove(e: MouseEvent) {
       if (draggingRef.current !== "right") return;
       const w = window.innerWidth;
-      const next = Math.max(320, Math.min(760, w - e.clientX));
+      const next = Math.max(320, Math.min(Math.floor(w * 0.72), w - e.clientX));
       setRightWidth(next);
     }
 

@@ -48,6 +48,7 @@ type Ctx = {
   toggleWindowCheck: (id: string) => void;
   bringToFront: (id: string) => void;
   closeWindow: (id: string) => void;
+  clearAllWindows: () => void;
 };
 
 const WorkspaceContext = createContext<Ctx | null>(null);
@@ -244,6 +245,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setWindows((prev) => prev.filter((w) => w.id !== id));
   }
 
+  function clearAllWindows() {
+    setWindows([]);
+  }
+
   // 체크된 위젯 ID 목록 (flowGraph 제외)
   const checkedWidgets = useMemo(
     () =>
@@ -266,6 +271,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       toggleWindowCheck,
       bringToFront,
       closeWindow,
+      clearAllWindows,
     }),
     [windows, checkedWidgets],
   );

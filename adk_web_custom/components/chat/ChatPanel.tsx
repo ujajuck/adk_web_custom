@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   useEffect,
   useRef,
   useState,
@@ -17,6 +17,140 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
   "http://localhost:8080";
 
+/* ── 마크다운 커스텀 컴포넌트 ── */
+const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+  // 표: 가로 스크롤 래퍼 + 테두리/줄무늬
+  table: ({ children, ...props }) => (
+    <div className="overflow-x-auto my-3 rounded-lg border border-gray-200">
+      <table
+        className="min-w-full border-collapse text-xs"
+        {...props}
+      >
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children, ...props }) => (
+    <thead className="bg-gray-100 text-gray-700" {...props}>
+      {children}
+    </thead>
+  ),
+  tbody: ({ children, ...props }) => (
+    <tbody className="divide-y divide-gray-100" {...props}>
+      {children}
+    </tbody>
+  ),
+  tr: ({ children, ...props }) => (
+    <tr className="even:bg-gray-50 hover:bg-blue-50 transition-colors" {...props}>
+      {children}
+    </tr>
+  ),
+  th: ({ children, ...props }) => (
+    <th
+      className="px-3 py-2 text-left font-semibold text-gray-700 border-b border-gray-300 whitespace-nowrap"
+      {...props}
+    >
+      {children}
+    </th>
+  ),
+  td: ({ children, ...props }) => (
+    <td
+      className="px-3 py-2 text-gray-700 border-r border-gray-100 last:border-r-0 whitespace-nowrap"
+      {...props}
+    >
+      {children}
+    </td>
+  ),
+  // 코드 블록 / 인라인 코드
+  code: ({ className, children, ...props }) => {
+    const isBlock = className?.startsWith("language-");
+    if (isBlock) {
+      return (
+        <code
+          className="block bg-gray-900 text-gray-100 p-3 rounded text-xs font-mono overflow-x-auto"
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code
+        className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded text-xs font-mono"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+  pre: ({ children, ...props }) => (
+    <pre className="bg-gray-900 rounded my-2 overflow-x-auto text-xs" {...props}>
+      {children}
+    </pre>
+  ),
+  // 헤딩
+  h1: ({ children, ...props }) => (
+    <h1 className="text-base font-bold text-gray-900 mt-4 mb-2 pb-1 border-b border-gray-200" {...props}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }) => (
+    <h2 className="text-sm font-semibold text-gray-900 mt-3 mb-1.5" {...props}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }) => (
+    <h3 className="text-sm font-medium text-gray-800 mt-2 mb-1" {...props}>
+      {children}
+    </h3>
+  ),
+  // 단락
+  p: ({ children, ...props }) => (
+    <p className="my-1 leading-relaxed text-gray-800" {...props}>
+      {children}
+    </p>
+  ),
+  // 리스트
+  ul: ({ children, ...props }) => (
+    <ul className="my-1 pl-5 list-disc space-y-0.5" {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }) => (
+    <ol className="my-1 pl-5 list-decimal space-y-0.5" {...props}>
+      {children}
+    </ol>
+  ),
+  li: ({ children, ...props }) => (
+    <li className="text-gray-700 leading-relaxed" {...props}>
+      {children}
+    </li>
+  ),
+  // 인용구
+  blockquote: ({ children, ...props }) => (
+    <blockquote
+      className="border-l-4 border-blue-400 pl-3 my-2 text-gray-600 italic bg-blue-50 py-1 rounded-r"
+      {...props}
+    >
+      {children}
+    </blockquote>
+  ),
+  // 수평선
+  hr: () => <hr className="my-3 border-gray-200" />,
+  // 링크
+  a: ({ children, ...props }) => (
+    <a className="text-blue-500 hover:text-blue-700 underline" {...props}>
+      {children}
+    </a>
+  ),
+  // 강조
+  strong: ({ children, ...props }) => (
+    <strong className="font-semibold text-gray-900" {...props}>
+      {children}
+    </strong>
+  ),
+};
+
 type SessionStatus = "idle" | "input_user" | "creating" | "ready" | "error";
 
 type WorkspaceSendDetail = {
@@ -24,13 +158,25 @@ type WorkspaceSendDetail = {
   fileName?: string;
 };
 
+type WidgetMeta =
+  | { type: "csvFile"; title: string; fileId: string }
+  | { type: "plotly"; title: string; fig: any };
+
+const STORAGE_KEY = "chatUserId";
+
 export default function ChatPanel() {
-  const { addPlotlyWindow, addCsvFileWindow, addFlowGraphWindow } = useWorkspace();
+  const { addPlotlyWindow, addCsvFileWindow, addFlowGraphWindow, clearAllWindows } = useWorkspace();
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const [widgetsMeta, setWidgetsMeta] = useState<WidgetMeta[]>([]);
 
-  const [userIdInput, setUserIdInput] = useState("");
+  const [userIdInput, setUserIdInput] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(STORAGE_KEY) ?? "";
+    }
+    return "";
+  });
   const [userId, setUserId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("input_user");
@@ -91,6 +237,7 @@ export default function ChatPanel() {
       setSessionId(sessionIdVal);
       setSessionStatus("ready");
       setMessages([{ role: "assistant", text: `세션 준비됨 · ${inputUserId}` }]);
+      localStorage.setItem(STORAGE_KEY, inputUserId);
 
       // Emit event to load notebooks
       window.dispatchEvent(new CustomEvent("notebook:load", { detail: { userId: inputUserId } }));
@@ -183,8 +330,13 @@ export default function ChatPanel() {
           json?.csv_files ?? [];
         for (const csv of csvFiles) {
           if (csv.file_id && csv.filename) {
-            addCsvFileWindow(csv.filename, csv.file_id);
-            pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${csv.filename}`);
+            const widgetTitle = toolName ? `${toolName}_${csv.filename}` : csv.filename;
+            addCsvFileWindow(widgetTitle, csv.file_id);
+            setWidgetsMeta((prev) => [
+              ...prev,
+              { type: "csvFile", title: widgetTitle, fileId: csv.file_id },
+            ]);
+            pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${widgetTitle}`);
           }
         }
 
@@ -193,8 +345,13 @@ export default function ChatPanel() {
           json?.plotly_figs ?? [];
         for (const pf of plotlyFigs) {
           if (pf.fig && pf.title) {
-            addPlotlyWindow(pf.title, pf.fig);
-            pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${pf.title}`);
+            const widgetTitle = toolName ? `${toolName}_${pf.title}` : pf.title;
+            addPlotlyWindow(widgetTitle, pf.fig);
+            setWidgetsMeta((prev) => [
+              ...prev,
+              { type: "plotly", title: widgetTitle, fig: pf.fig },
+            ]);
+            pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${widgetTitle}`);
           }
         }
 
@@ -215,7 +372,7 @@ export default function ChatPanel() {
         setIsSending(false);
       }
     },
-    [isSending, userId, sessionId, addCsvFileWindow, addPlotlyWindow],
+    [isSending, userId, sessionId, addCsvFileWindow, addPlotlyWindow, setWidgetsMeta],
   );
 
   function send() {
@@ -236,6 +393,7 @@ export default function ChatPanel() {
           session_id: sessionId,
           title,
           messages,
+          metadata: { widgets: widgetsMeta },
         }),
       });
 
@@ -254,7 +412,7 @@ export default function ChatPanel() {
     } finally {
       setIsSaving(false);
     }
-  }, [userId, sessionId, messages]);
+  }, [userId, sessionId, messages, widgetsMeta]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -300,18 +458,34 @@ export default function ChatPanel() {
           session_id: string;
           title: string;
           messages: Array<{ role: string; text: string }>;
+          metadata?: { widgets?: WidgetMeta[] };
         };
       }>;
       const nb = ce.detail?.notebook;
       if (nb?.messages) {
         setMessages(nb.messages as Msg[]);
+
+        // 저장된 위젯 복원
+        const savedWidgets = nb.metadata?.widgets ?? [];
+        if (savedWidgets.length > 0) {
+          clearAllWindows();
+          for (const w of savedWidgets) {
+            if (w.type === "csvFile") {
+              addCsvFileWindow(w.title, w.fileId);
+            } else if (w.type === "plotly") {
+              addPlotlyWindow(w.title, w.fig);
+            }
+          }
+          setWidgetsMeta(savedWidgets);
+        }
+
         pushMsg("assistant", `노트북 "${nb.title}" 불러옴 (읽기 전용)`);
       }
     };
 
     window.addEventListener("notebook:select", handler);
     return () => window.removeEventListener("notebook:select", handler);
-  }, []);
+  }, [clearAllWindows, addCsvFileWindow, addPlotlyWindow]);
 
   // Listen for notebook:add events (from FlowWidget save)
   useEffect(() => {
@@ -378,7 +552,7 @@ export default function ChatPanel() {
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ text: string; artifact?: string; column?: string }>;
-      const { text, artifact } = ce.detail || {};
+      const { text } = ce.detail || {};
       if (text) {
         setInput((prev) => prev + text);
         inputRef.current?.focus();
@@ -388,6 +562,28 @@ export default function ChatPanel() {
     window.addEventListener("chat:insert", handler);
     return () => window.removeEventListener("chat:insert", handler);
   }, []);
+
+  // Listen for chat:new-session (새 대화 - userId 유지, 세션만 초기화)
+  useEffect(() => {
+    const handler = () => {
+      const savedId = localStorage.getItem(STORAGE_KEY) ?? "";
+      setMessages([]);
+      setInput("");
+      setWidgetsMeta([]);
+      setSessionId("");
+      setSessionStatus("creating");
+      clearAllWindows();
+      creatingRef.current = false;
+      if (savedId) {
+        createSession(savedId);
+      } else {
+        setSessionStatus("input_user");
+      }
+    };
+
+    window.addEventListener("chat:new-session", handler);
+    return () => window.removeEventListener("chat:new-session", handler);
+  }, [createSession, clearAllWindows]);
 
   // Click anywhere on chat area to focus input
   const handleChatAreaClick = () => {
@@ -512,7 +708,7 @@ export default function ChatPanel() {
             >
               <div
                 className={cn(
-                  "max-w-[80%] px-4 py-2.5 text-sm leading-relaxed",
+                  "max-w-[90%] px-4 py-2.5 text-sm leading-relaxed",
                   isUser
                     ? "bg-blue-500 text-white rounded-2xl rounded-br-md shadow-md whitespace-pre-wrap"
                     : "bg-white text-gray-800 rounded-2xl rounded-bl-md shadow-sm border border-gray-200",
@@ -523,7 +719,8 @@ export default function ChatPanel() {
                 ) : (
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
-                    className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded"
+                    components={markdownComponents}
+                    className="max-w-none text-sm"
                   >
                     {m.text}
                   </ReactMarkdown>
