@@ -473,6 +473,17 @@ export default function FlowGraphWidget({
               {hoveredNode.originalEdge.tool_name}
             </div>
           )}
+          {/* artifact 노드: 이 아티팩트를 생성한 tool 표시 */}
+          {!hoveredNode.isTool && filteredData && (() => {
+            const creatingEdge = filteredData.edges.find(
+              (e) => e.target === hoveredNode.id
+            );
+            return creatingEdge ? (
+              <div className="text-xs text-purple-400">
+                생성 툴: {creatingEdge.tool_name}
+              </div>
+            ) : null;
+          })()}
           <div className="mt-1 text-xs text-slate-500">
             {hoveredNode.isTool ? "Tool" : "Artifact"}
           </div>

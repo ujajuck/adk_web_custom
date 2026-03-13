@@ -370,6 +370,8 @@ export default function ChatPanel() {
         pushMsg("assistant", `요청 오류: ${String(e?.message ?? e)}`);
       } finally {
         setIsSending(false);
+        // 응답 후 입력창 자동 포커스
+        setTimeout(() => inputRef.current?.focus(), 0);
       }
     },
     [isSending, userId, sessionId, addCsvFileWindow, addPlotlyWindow, setWidgetsMeta],
@@ -588,9 +590,10 @@ export default function ChatPanel() {
     return () => window.removeEventListener("chat:new-session", handler);
   }, [createSession, clearAllWindows]);
 
-  // Click anywhere on chat area to focus input
-  const handleChatAreaClick = () => {
-    if (sessionStatus === "ready") {
+  // 채팅 배경(컨테이너 자체)을 클릭할 때만 입력창 포커스
+  // 메시지 텍스트 선택/복사 시에는 포커스 이동하지 않음
+  const handleChatAreaClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && sessionStatus === "ready") {
       inputRef.current?.focus();
     }
   };
