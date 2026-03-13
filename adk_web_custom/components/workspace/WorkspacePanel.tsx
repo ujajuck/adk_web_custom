@@ -54,6 +54,10 @@ export default function WorkspacePanel() {
     window.dispatchEvent(new CustomEvent("workspace:flow"));
   };
 
+  const onSave = () => {
+    window.dispatchEvent(new CustomEvent("workspace:save"));
+  };
+
 
   // Ctrl+click handler for widget header
   const handleHeaderClick = (e: React.MouseEvent, win: (typeof windows)[number]) => {
@@ -140,6 +144,7 @@ export default function WorkspacePanel() {
         height={HEADER_H}
         onRefresh={onRefresh}
         onFlow={onFlow}
+        onSave={onSave}
       />
 
       <div

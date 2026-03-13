@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { RefreshCw, Workflow } from "lucide-react";
+import { RefreshCw, Workflow, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -37,6 +37,7 @@ export default function WorkspaceTopBar(props: {
   height?: number;
   onRefresh: () => void;
   onFlow: () => void;
+  onSave: () => void;
 }) {
   const h = props.height ?? 48;
 
@@ -52,6 +53,12 @@ export default function WorkspaceTopBar(props: {
       />
 
       <div className="flex-1" />
+
+      <TopIconButton
+        label="저장"
+        onClick={props.onSave}
+        icon={<Save size={16} />}
+      />
 
       <TopIconButton
         label="flow"

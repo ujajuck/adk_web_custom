@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Save, RefreshCw, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const API_URL =
@@ -184,10 +184,6 @@ export default function FlowGraphWidget({
   const [hoveredNode, setHoveredNode] = useState<LayoutNode | null>(null);
   const [layoutNodes, setLayoutNodes] = useState<LayoutNode[]>([]);
   const [layoutEdges, setLayoutEdges] = useState<LayoutEdge[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [showSavePanel, setShowSavePanel] = useState(false);
-  const [selectedForSave, setSelectedForSave] = useState<Set<string>>(new Set());
-
   // Fetch flow data
   const fetchFlow = useCallback(async () => {
     try {
@@ -394,83 +390,6 @@ export default function FlowGraphWidget({
     [layoutNodes],
   );
 
-  // Get artifact windows (excluding flowGraph itself)
-  const artifactWindows = React.useMemo(() => {
-    return allWindows.filter((w) => w.widget.type !== "flowGraph");
-  }, [allWindows]);
-
-  // Toggle selection for an artifact
-  const toggleSelect = (title: string) => {
-    setSelectedForSave((prev) => {
-      const next = new Set(prev);
-      if (next.has(title)) {
-        next.delete(title);
-      } else {
-        next.add(title);
-      }
-      return next;
-    });
-  };
-
-  // Select/deselect all
-  const selectAll = () => {
-    setSelectedForSave(new Set(artifactWindows.map((w) => w.widget.title)));
-  };
-  const deselectAll = () => {
-    setSelectedForSave(new Set());
-  };
-
-  // Open save panel
-  const openSavePanel = () => {
-    // Initialize with all artifacts selected
-    setSelectedForSave(new Set(artifactWindows.map((w) => w.widget.title)));
-    setShowSavePanel(true);
-  };
-
-  // Save to notebook with selected items only
-  const handleSave = useCallback(async () => {
-    if (!filteredData) return;
-
-    setSaving(true);
-    try {
-      // Filter flow data to only include selected artifacts
-      const selectedNodes = filteredData.nodes.filter((n) =>
-        selectedForSave.has(n.label) || selectedForSave.size === 0
-      );
-      const selectedNodeIds = new Set(selectedNodes.map((n) => n.id));
-
-      // Include edges connected to selected nodes
-      const selectedEdges = filteredData.edges.filter(
-        (e) => selectedNodeIds.has(e.source) || selectedNodeIds.has(e.target)
-      );
-
-      const saveData = {
-        ...filteredData,
-        nodes: selectedNodes,
-        edges: selectedEdges,
-      };
-
-      // 노트북에 저장 이벤트 발생
-      window.dispatchEvent(
-        new CustomEvent("notebook:add", {
-          detail: {
-            type: "flow",
-            sessionId,
-            data: saveData,
-            selectedArtifacts: Array.from(selectedForSave),
-            title: `Flow Graph - ${new Date().toLocaleString()}`,
-          },
-        }),
-      );
-
-      setShowSavePanel(false);
-    } catch (err) {
-      console.error("Failed to save to notebook:", err);
-    } finally {
-      setSaving(false);
-    }
-  }, [filteredData, sessionId, selectedForSave]);
-
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-900 text-slate-400">
@@ -518,100 +437,13 @@ export default function FlowGraphWidget({
         <Button
           variant="secondary"
           size="sm"
-          onClick={openSavePanel}
-          disabled={saving || artifactWindows.length === 0}
-          className="h-8 gap-1.5 bg-slate-700 text-slate-200 hover:bg-slate-600"
-        >
-          <Save size={14} />
-          노트북에 저장
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="sm"
           onClick={fetchFlow}
           className="h-8 w-8 bg-slate-700 p-0 text-slate-200 hover:bg-slate-600"
           title="새로고침"
         >
           <RefreshCw size={14} />
         </Button>
-
-        {artifactWindows.length > 0 && (
-          <span className="ml-auto text-xs text-slate-400">
-            {artifactWindows.length}개 아티팩트
-          </span>
-        )}
       </div>
-
-      {/* Save panel with checkbox selection */}
-      {showSavePanel && (
-        <div className="absolute left-2 top-12 z-20 w-64 rounded border border-slate-600 bg-slate-800 shadow-lg">
-          <div className="flex items-center justify-between border-b border-slate-600 px-3 py-2">
-            <span className="text-sm font-medium text-slate-200">저장할 항목 선택</span>
-            <button
-              onClick={() => setShowSavePanel(false)}
-              className="rounded p-1 hover:bg-slate-700 text-slate-400"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          <div className="max-h-48 overflow-auto p-2">
-            {artifactWindows.length === 0 ? (
-              <div className="py-3 text-center text-xs text-slate-400">
-                저장 가능한 아티팩트가 없습니다
-              </div>
-            ) : (
-              <>
-                <div className="mb-2 flex items-center gap-2 border-b border-slate-700 pb-2">
-                  <button
-                    onClick={selectAll}
-                    className="text-xs text-blue-400 hover:text-blue-300"
-                  >
-                    전체 선택
-                  </button>
-                  <span className="text-slate-600">|</span>
-                  <button
-                    onClick={deselectAll}
-                    className="text-xs text-slate-400 hover:text-slate-300"
-                  >
-                    전체 해제
-                  </button>
-                </div>
-                {artifactWindows.map((win) => (
-                  <label
-                    key={win.id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-700"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedForSave.has(win.widget.title)}
-                      onChange={() => toggleSelect(win.widget.title)}
-                      className="h-3.5 w-3.5 rounded border-slate-500 bg-slate-700 text-blue-500"
-                    />
-                    <span className="truncate text-xs text-slate-300">{win.widget.title}</span>
-                  </label>
-                ))}
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between border-t border-slate-600 p-2">
-            <span className="text-xs text-slate-400">
-              {selectedForSave.size}개 선택됨
-            </span>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving || selectedForSave.size === 0}
-              className="h-7 gap-1 bg-blue-600 px-3 text-xs text-white hover:bg-blue-500"
-            >
-              <Save size={12} />
-              {saving ? "저장 중..." : "저장"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       <canvas
         ref={canvasRef}

@@ -274,8 +274,8 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                   {nb.user_id} · {formatDate(nb.updated_at)}
                 </div>
               </div>
-              {nb.user_id === userId && (
-                <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1">
+                {nb.user_id === userId && (
                   <button
                     onClick={(e) => handleShare(nb, e)}
                     className="p-1 rounded hover:bg-slate-100 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -283,15 +283,15 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                   >
                     <Share2 size={14} />
                   </button>
-                  <button
-                    onClick={(e) => handleDelete(nb.notebook_id, e)}
-                    className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
-                    title="삭제"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={(e) => handleDelete(nb.notebook_id, e)}
+                  className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                  title="삭제"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           </div>
         ))}

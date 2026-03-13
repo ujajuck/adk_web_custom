@@ -448,6 +448,13 @@ export default function ChatPanel() {
     return () => window.removeEventListener("workspace:flow", handler);
   }, [sessionId, addFlowGraphWindow]);
 
+  // Listen for workspace:save (워크스페이스 TopBar 저장 버튼)
+  useEffect(() => {
+    const handler = () => void saveNotebook();
+    window.addEventListener("workspace:save", handler);
+    return () => window.removeEventListener("workspace:save", handler);
+  }, [saveNotebook]);
+
   // Listen for notebook selection (load history)
   useEffect(() => {
     const handler = (e: Event) => {
@@ -465,21 +472,17 @@ export default function ChatPanel() {
       if (nb?.messages) {
         setMessages(nb.messages as Msg[]);
 
-        // 저장된 위젯 복원
+        // 저장된 위젯 복원 (채팅 메시지 표시 없이)
         const savedWidgets = nb.metadata?.widgets ?? [];
-        if (savedWidgets.length > 0) {
-          clearAllWindows();
-          for (const w of savedWidgets) {
-            if (w.type === "csvFile") {
-              addCsvFileWindow(w.title, w.fileId);
-            } else if (w.type === "plotly") {
-              addPlotlyWindow(w.title, w.fig);
-            }
+        clearAllWindows();
+        for (const w of savedWidgets) {
+          if (w.type === "csvFile") {
+            addCsvFileWindow(w.title, w.fileId);
+          } else if (w.type === "plotly") {
+            addPlotlyWindow(w.title, w.fig);
           }
-          setWidgetsMeta(savedWidgets);
         }
-
-        pushMsg("assistant", `노트북 "${nb.title}" 불러옴 (읽기 전용)`);
+        setWidgetsMeta(savedWidgets);
       }
     };
 
