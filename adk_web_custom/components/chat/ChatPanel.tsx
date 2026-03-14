@@ -6,7 +6,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { Send, Loader2, AlertCircle, RefreshCw, Save, User } from "lucide-react";
+import { Send, Loader2, AlertCircle, RefreshCw, Save, User, Bot, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -171,6 +171,13 @@ export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [widgetsMeta, setWidgetsMeta] = useState<WidgetMeta[]>([]);
 
+  // 에이전트 관련 상태
+  const [agents, setAgents] = useState<string[]>(["root_agent"]);
+  const [selectedAgent, setSelectedAgent] = useState<string>("root_agent");
+  const [currentAgent, setCurrentAgent] = useState<string>("root_agent");
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const agentDropdownRef = useRef<HTMLDivElement | null>(null);
+
   const [userIdInput, setUserIdInput] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem(STORAGE_KEY) ?? "";
@@ -239,6 +246,15 @@ export default function ChatPanel() {
       setMessages([{ role: "assistant", text: `세션 준비됨 · ${inputUserId}` }]);
       localStorage.setItem(STORAGE_KEY, inputUserId);
 
+      // 에이전트 목록 로드
+      fetch(`${API_URL}/api/agents`)
+        .then((r) => r.json())
+        .then((data) => {
+          const list: string[] = data?.agents ?? [];
+          if (list.length > 0) setAgents(list);
+        })
+        .catch(() => {});
+
       // Emit event to load notebooks
       window.dispatchEvent(new CustomEvent("notebook:load", { detail: { userId: inputUserId } }));
     } catch (e: any) {
@@ -271,11 +287,14 @@ export default function ChatPanel() {
       setInput("");
 
       try {
-        const reqBody = {
+        const reqBody: Record<string, string> = {
           user_id: userId,
           session_id: sessionId,
           message: t,
         };
+        if (selectedAgent && selectedAgent !== "root_agent") {
+          reqBody.agent_name = selectedAgent;
+        }
         console.log("[ChatPanel] Sending chat:", API_URL, reqBody);
 
         const res = await fetch(`${API_URL}/api/chat`, {
@@ -303,10 +322,13 @@ export default function ChatPanel() {
           return;
         }
 
-        // 새 응답 포맷: { status, outputs: [{ type, uri, mime_type }], text?, tool_name? }
+        // 새 응답 포맷: { status, outputs, text?, tool_name?, responding_agent? }
         const outputs: Array<{ type: string; uri: string; mime_type?: string }> =
           json?.outputs ?? [];
         const toolName: string = json?.tool_name ?? "";
+        if (json?.responding_agent) {
+          setCurrentAgent(json.responding_agent);
+        }
         const isPlottingTool = toolName.startsWith("plotting");
 
         for (const out of outputs) {
@@ -374,7 +396,7 @@ export default function ChatPanel() {
         setTimeout(() => inputRef.current?.focus(), 0);
       }
     },
-    [isSending, userId, sessionId, addCsvFileWindow, addPlotlyWindow, setWidgetsMeta],
+    [isSending, userId, sessionId, selectedAgent, addCsvFileWindow, addPlotlyWindow, setWidgetsMeta],
   );
 
   function send() {
@@ -590,6 +612,17 @@ export default function ChatPanel() {
     return () => window.removeEventListener("chat:new-session", handler);
   }, [createSession, clearAllWindows]);
 
+  // 에이전트 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setAgentDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   // 채팅 배경(컨테이너 자체)을 클릭할 때만 입력창 포커스
   // 메시지 텍스트 선택/복사 시에는 포커스 이동하지 않음
   const handleChatAreaClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -655,6 +688,57 @@ export default function ChatPanel() {
             <span className="font-mono text-xs text-gray-600 truncate max-w-[120px]">
               {userId}
             </span>
+            {/* 현재 응답 에이전트 + 선택 드롭다운 */}
+            <div ref={agentDropdownRef} className="relative ml-1">
+              <button
+                className={cn(
+                  "h-6 px-2 text-xs rounded-full flex items-center gap-1 transition-colors border",
+                  selectedAgent === "root_agent"
+                    ? "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                    : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                )}
+                onClick={() => setAgentDropdownOpen((v) => !v)}
+                title="에이전트 선택"
+              >
+                <Bot size={10} />
+                <span className="max-w-[80px] truncate">{selectedAgent}</span>
+                <ChevronDown size={10} />
+              </button>
+              {agentDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[160px] py-1">
+                  <div className="px-3 py-1.5 text-xs text-gray-400 font-medium border-b border-gray-100">
+                    에이전트 선택
+                  </div>
+                  {agents.map((ag) => (
+                    <button
+                      key={ag}
+                      className={cn(
+                        "w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 transition-colors",
+                        selectedAgent === ag ? "text-purple-700 font-medium" : "text-gray-700"
+                      )}
+                      onClick={() => {
+                        setSelectedAgent(ag);
+                        setAgentDropdownOpen(false);
+                      }}
+                    >
+                      <Bot size={10} className={selectedAgent === ag ? "text-purple-500" : "text-gray-400"} />
+                      <span className="truncate">{ag}</span>
+                      {currentAgent === ag && (
+                        <span className="ml-auto text-[10px] text-green-600 bg-green-50 px-1 rounded">
+                          응답중
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* 현재 실제 응답한 에이전트 표시 (선택과 다를 때) */}
+            {currentAgent !== selectedAgent && (
+              <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
+                실제: {currentAgent}
+              </span>
+            )}
           </>
         )}
         {sessionStatus === "creating" && (

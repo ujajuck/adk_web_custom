@@ -148,6 +148,19 @@ def extract_plotly_urls(text: str) -> list[str]:
     return _PLOTLY_URL_PATTERN.findall(text)
 
 
+def extract_responding_agent(events: Any) -> str:
+    """Extract the name of the last agent that responded (from event 'author' field)."""
+    if not isinstance(events, list):
+        return "root_agent"
+    last_author = "root_agent"
+    for ev in reversed(events):
+        author = ev.get("author")
+        if author and author != "user":
+            last_author = author
+            break
+    return last_author
+
+
 def extract_resource_links_from_events(events: Any) -> list[str]:
     """Extract resource_link URIs from tool outputs in ADK events.
 

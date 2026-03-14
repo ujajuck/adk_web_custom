@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     user_id: str
     session_id: str
     message: str
+    agent_name: str | None = None
 
 
 # ── Responses ─────────────────────────────────────────────
@@ -56,6 +57,7 @@ class ChatResponse(BaseModel):
     job_id: str
     status: str = "success"
     text: str
+    responding_agent: str = "root_agent"
     outputs: list[OutputItem] = Field(default_factory=list)
     # Legacy fields (deprecated)
     csv_files: list[CsvFileMeta] = Field(default_factory=list)
