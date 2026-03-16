@@ -148,6 +148,25 @@ def extract_plotly_urls(text: str) -> list[str]:
     return _PLOTLY_URL_PATTERN.findall(text)
 
 
+def extract_frontend_trigger(events: Any) -> dict[str, Any] | None:
+    """Extract frontend_data from session stateDelta if frontend_trigger is truthy.
+
+    ADK agents can set session state via actions.stateDelta.
+    When stateDelta contains {frontend_trigger: true, frontend_data: {...}},
+    this function returns the frontend_data dict.
+    """
+    if not isinstance(events, list):
+        return None
+    for ev in events:
+        actions = ev.get("actions") or {}
+        state_delta = actions.get("stateDelta") or {}
+        if state_delta.get("frontend_trigger"):
+            frontend_data = state_delta.get("frontend_data")
+            if isinstance(frontend_data, dict):
+                return frontend_data
+    return None
+
+
 def extract_responding_agent(events: Any) -> str:
     """Extract the name of the last agent that responded (from event 'author' field)."""
     if not isinstance(events, list):

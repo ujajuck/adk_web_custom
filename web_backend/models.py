@@ -58,8 +58,8 @@ class ChatResponse(BaseModel):
     status: str = "success"
     text: str
     responding_agent: str = "root_agent"
+    frontend_data: Any | None = None
     outputs: list[OutputItem] = Field(default_factory=list)
-    # Legacy fields (deprecated)
     csv_files: list[CsvFileMeta] = Field(default_factory=list)
     plotly_figs: list[PlotlyFigMeta] = Field(default_factory=list)
     raw_events: Any | None = None

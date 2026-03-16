@@ -18,6 +18,7 @@ from ..services.plotly_store import plotly_store
 from ..services.response_parser import (
     extract_artifact_delta,
     extract_assistant_text,
+    extract_frontend_trigger,
     extract_plotly_fig,
     extract_plotly_urls,
     extract_resource_links_from_events,
@@ -74,6 +75,7 @@ async def chat(req: ChatRequest):
     artifact_delta = extract_artifact_delta(events)
     plotly_result = extract_plotly_fig(events)
     responding_agent = extract_responding_agent(events)
+    frontend_data = extract_frontend_trigger(events)
 
     csv_metas: list[CsvFileMeta] = []
     plotly_metas: list[PlotlyFigMeta] = []
@@ -208,6 +210,7 @@ async def chat(req: ChatRequest):
         status="success",
         text=assistant_text,
         responding_agent=responding_agent,
+        frontend_data=frontend_data,
         outputs=output_items,
         csv_files=csv_metas,
         plotly_figs=plotly_metas,

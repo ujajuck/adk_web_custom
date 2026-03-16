@@ -153,6 +153,28 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
 
 type SessionStatus = "idle" | "input_user" | "creating" | "ready" | "error";
 
+/* ── Frontend Form types (from ADK stateDelta.frontend_data) ── */
+interface FormFieldOption { label: string; value: string }
+interface FormField {
+  name: string;
+  label: string;
+  type: "text" | "select" | "number";
+  default?: string | number;
+  placeholder?: string;
+  required?: boolean;
+  options?: FormFieldOption[];
+  min?: number;
+  max?: number;
+  step?: number;
+}
+interface FrontendFormData {
+  type: "input_form";
+  title?: string;
+  description?: string;
+  submit_label?: string;
+  fields: FormField[];
+}
+
 type WorkspaceSendDetail = {
   text: string;
   fileName?: string;
@@ -170,6 +192,10 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [widgetsMeta, setWidgetsMeta] = useState<WidgetMeta[]>([]);
+
+  // 동적 폼 상태 (frontend_trigger)
+  const [pendingForm, setPendingForm] = useState<FrontendFormData | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, string | number>>({});
 
   // 에이전트 관련 상태
   const [agents, setAgents] = useState<string[]>(["root_agent"]);
@@ -198,7 +224,7 @@ export default function ChatPanel() {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, pendingForm]);
 
   function pushMsg(role: Msg["role"], text: string) {
     setMessages((m) => [...m, { role, text }]);
@@ -381,11 +407,23 @@ export default function ChatPanel() {
         const hasWidgets = csvFiles.length > 0 || plotlyFigs.length > 0 || outputs.length > 0;
         if (json?.text) {
           pushMsg("assistant", json.text);
-        } else if (!hasWidgets) {
+        } else if (!hasWidgets && !json?.frontend_data) {
           pushMsg(
             "assistant",
             `응답 없음\n${JSON.stringify(json, null, 2)}`,
           );
+        }
+
+        // 동적 폼 트리거
+        if (json?.frontend_data?.type === "input_form") {
+          const formData = json.frontend_data as FrontendFormData;
+          // 각 필드의 default 값으로 초기화
+          const initValues: Record<string, string | number> = {};
+          for (const f of formData.fields) {
+            initValues[f.name] = f.default ?? (f.type === "number" ? 0 : "");
+          }
+          setFormValues(initValues);
+          setPendingForm(formData);
         }
       } catch (e: any) {
         console.error("[ChatPanel] Chat error:", e);
@@ -401,6 +439,15 @@ export default function ChatPanel() {
 
   function send() {
     void sendTextToAdk(input);
+  }
+
+  function submitForm(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pendingForm) return;
+    const payload = JSON.stringify(formValues, null, 2);
+    setPendingForm(null);
+    setFormValues({});
+    void sendTextToAdk(payload);
   }
 
   const saveNotebook = useCallback(async () => {
@@ -819,6 +866,98 @@ export default function ChatPanel() {
             </div>
           );
         })}
+
+        {/* ── 동적 입력 폼 (frontend_trigger) ── */}
+        {pendingForm && (
+          <div className="flex justify-start">
+            <div className="max-w-[95%] w-full bg-white rounded-2xl rounded-bl-md shadow-sm border border-blue-200 overflow-hidden">
+              {/* 폼 헤더 */}
+              <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <span className="text-sm font-semibold text-blue-800">
+                  {pendingForm.title ?? "입력 필요"}
+                </span>
+              </div>
+              <form onSubmit={submitForm} className="px-4 py-3 space-y-3">
+                {pendingForm.description && (
+                  <p className="text-xs text-gray-500">{pendingForm.description}</p>
+                )}
+                {pendingForm.fields.map((field) => (
+                  <div key={field.name} className="space-y-1">
+                    <label className="block text-xs font-medium text-gray-700">
+                      {field.label}
+                      {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                    </label>
+                    {field.type === "select" ? (
+                      <select
+                        className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                        value={String(formValues[field.name] ?? field.default ?? "")}
+                        required={field.required}
+                        onChange={(e) =>
+                          setFormValues((v) => ({ ...v, [field.name]: e.target.value }))
+                        }
+                      >
+                        {(field.options ?? []).map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : field.type === "number" ? (
+                      <input
+                        type="number"
+                        className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                        value={formValues[field.name] ?? field.default ?? ""}
+                        required={field.required}
+                        min={field.min}
+                        max={field.max}
+                        step={field.step}
+                        placeholder={field.placeholder}
+                        onChange={(e) =>
+                          setFormValues((v) => ({
+                            ...v,
+                            [field.name]: e.target.valueAsNumber,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                        value={String(formValues[field.name] ?? field.default ?? "")}
+                        required={field.required}
+                        placeholder={field.placeholder}
+                        onChange={(e) =>
+                          setFormValues((v) => ({ ...v, [field.name]: e.target.value }))
+                        }
+                      />
+                    )}
+                  </div>
+                ))}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={!canSend}
+                    className={cn(
+                      "flex-1 h-9 rounded-lg text-sm font-medium transition-all",
+                      "bg-blue-500 text-white hover:bg-blue-600",
+                      "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                    )}
+                  >
+                    {pendingForm.submit_label ?? "실행"}
+                  </button>
+                  <button
+                    type="button"
+                    className="h-9 px-3 rounded-lg text-sm text-gray-500 hover:bg-gray-100 transition-colors"
+                    onClick={() => setPendingForm(null)}
+                  >
+                    취소
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 입력창 ── */}
