@@ -419,9 +419,15 @@ export default function ChatPanel() {
         // 동적 폼 트리거
         if (json?.frontend_data?.type === "input_form") {
           const formData = json.frontend_data as FrontendFormData;
+          // name 누락 방어: 백엔드에서 이미 처리하지만 프론트에서도 index 기반 키 부여
+          const safeFields = formData.fields.map((f, i) => ({
+            ...f,
+            name: f.name || `field_${i}`,
+          }));
+          const safeForm = { ...formData, fields: safeFields };
           // 각 필드의 default 값으로 초기화 (unit_options가 있으면 __unit도 초기화)
           const initValues: Record<string, string | number> = {};
-          for (const f of formData.fields) {
+          for (const f of safeFields) {
             initValues[f.name] = f.default ?? (f.type === "number" ? 0 : "");
             if (f.unit_options?.length) {
               initValues[`${f.name}__unit`] =
@@ -429,7 +435,7 @@ export default function ChatPanel() {
             }
           }
           setFormValues(initValues);
-          setPendingForm(formData);
+          setPendingForm(safeForm);
         }
       } catch (e: any) {
         console.error("[ChatPanel] Chat error:", e);
@@ -741,7 +747,7 @@ export default function ChatPanel() {
             <span className="font-mono text-xs text-gray-600 truncate max-w-[120px]">
               {userId}
             </span>
-            {/* 현재 응답 에이전트 + 선택 드롭다운 */}
+            {/* 대화 에이전트 선택 드롭다운 */}
             <div ref={agentDropdownRef} className="relative ml-1">
               <button
                 className={cn(
@@ -751,23 +757,23 @@ export default function ChatPanel() {
                     : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
                 )}
                 onClick={() => setAgentDropdownOpen((v) => !v)}
-                title="에이전트 선택"
+                title="대화할 에이전트 선택"
               >
                 <Bot size={10} />
-                <span className="max-w-[80px] truncate">{selectedAgent}</span>
+                <span className="max-w-[100px] truncate">{selectedAgent}</span>
                 <ChevronDown size={10} />
               </button>
               {agentDropdownOpen && (
-                <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[160px] py-1">
+                <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[180px] py-1">
                   <div className="px-3 py-1.5 text-xs text-gray-400 font-medium border-b border-gray-100">
-                    에이전트 선택
+                    대화할 에이전트
                   </div>
                   {agents.map((ag) => (
                     <button
                       key={ag}
                       className={cn(
                         "w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 transition-colors",
-                        selectedAgent === ag ? "text-purple-700 font-medium" : "text-gray-700"
+                        selectedAgent === ag ? "text-purple-700 font-medium bg-purple-50" : "text-gray-700"
                       )}
                       onClick={() => {
                         setSelectedAgent(ag);
@@ -775,10 +781,13 @@ export default function ChatPanel() {
                       }}
                     >
                       <Bot size={10} className={selectedAgent === ag ? "text-purple-500" : "text-gray-400"} />
-                      <span className="truncate">{ag}</span>
-                      {currentAgent === ag && (
-                        <span className="ml-auto text-[10px] text-green-600 bg-green-50 px-1 rounded">
-                          응답중
+                      <span className="truncate flex-1">{ag}</span>
+                      {selectedAgent === ag && (
+                        <span className="text-[10px] text-purple-500">✓</span>
+                      )}
+                      {currentAgent === ag && selectedAgent !== ag && (
+                        <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">
+                          마지막 응답
                         </span>
                       )}
                     </button>
@@ -786,10 +795,10 @@ export default function ChatPanel() {
                 </div>
               )}
             </div>
-            {/* 현재 실제 응답한 에이전트 표시 (선택과 다를 때) */}
+            {/* 마지막 응답 에이전트가 현재 선택과 다를 때 작은 힌트 */}
             {currentAgent !== selectedAgent && (
-              <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
-                실제: {currentAgent}
+              <span className="text-[10px] text-gray-400">
+                (마지막: {currentAgent})
               </span>
             )}
           </>

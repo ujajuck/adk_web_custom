@@ -56,7 +56,9 @@ async def chat(req: ChatRequest):
     job_id = f"job_{uuid.uuid4().hex[:12]}"
 
     try:
-        adk_result = await send_message_to_adk(req.user_id, req.session_id, req.message)
+        adk_result = await send_message_to_adk(
+            req.user_id, req.session_id, req.message, req.agent_name
+        )
         log.debug("ADK returned status=%s", adk_result.get("status"))
     except Exception as exc:
         log.error("ADK request failed: %s", exc, exc_info=True)

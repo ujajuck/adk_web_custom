@@ -119,17 +119,24 @@ async def send_message_to_adk(
     user_id: str,
     session_id: str,
     message: str,
+    agent_name: str | None = None,
 ) -> dict[str, Any]:
-    """Send message to ADK. Returns {status, outputs, events}."""
+    """Send message to ADK. Returns {status, outputs, events}.
+
+    agent_name: 특정 에이전트를 지정할 때 사용.
+    ADK /run 에 agentName 파라미터로 전달 (ADK 버전에 따라 지원 여부 다름).
+    """
     base = settings.ADK_BASE_URL.rstrip("/")
     app = settings.ADK_APP_NAME
 
-    payload = {
+    payload: dict[str, Any] = {
         "appName": app,
         "userId": user_id,
         "sessionId": session_id,
         "newMessage": {"role": "user", "parts": [{"text": message}]},
     }
+    if agent_name:
+        payload["agentName"] = agent_name
 
     async with httpx.AsyncClient(timeout=_timeout) as client:
         resp = await client.post(f"{base}/run", json=payload)
