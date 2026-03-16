@@ -150,10 +150,8 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
     }
   };
 
-  if (collapsed) return null;
-
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className={`h-full flex flex-col bg-slate-50${collapsed ? " hidden" : ""}`}>
       {/* 헤더 */}
       <div className="px-4 py-3 flex items-center justify-between border-b bg-white">
         <span className="font-semibold text-slate-800">노트북</span>
@@ -190,7 +188,7 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
       </div>
 
       {/* 목록 */}
-      <ScrollArea className="flex-1 px-3">
+      <ScrollArea className="flex-1 px-2">
         <div className="flex items-center gap-1.5 px-1 py-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
           <FileText size={12} />
           내 노트북 ({myNotebooks.length})
@@ -204,13 +202,13 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
           <div
             key={nb.notebook_id}
             onClick={() => handleSelectNotebook(nb)}
-            className={`w-full text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
+            className={`w-full min-w-0 text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
               selectedNotebook?.notebook_id === nb.notebook_id
                 ? "bg-white border-blue-200 shadow-sm"
                 : "border-transparent hover:border-slate-200"
             }`}
           >
-            <div className="flex items-start justify-between gap-1">
+            <div className="flex items-start justify-between gap-1 min-w-0">
               <div className="flex-1 min-w-0 pr-1">
                 <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
                   {nb.title}
@@ -259,13 +257,13 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
           <div
             key={`shared_${nb.notebook_id}`}
             onClick={() => handleSelectNotebook(nb)}
-            className={`w-full text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
+            className={`w-full min-w-0 text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
               selectedNotebook?.notebook_id === nb.notebook_id
                 ? "bg-white border-blue-200 shadow-sm"
                 : "border-transparent hover:border-slate-200"
             }`}
           >
-            <div className="flex items-start justify-between gap-1">
+            <div className="flex items-start justify-between gap-1 min-w-0">
               <div className="flex-1 min-w-0 pr-1">
                 <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
                   {nb.title}

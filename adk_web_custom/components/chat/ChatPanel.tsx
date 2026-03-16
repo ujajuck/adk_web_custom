@@ -6,7 +6,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { Send, Loader2, AlertCircle, RefreshCw, Save, User, Bot, ChevronDown } from "lucide-react";
+import { Send, Loader2, AlertCircle, RefreshCw, Save, User, Bot, ChevronDown, LogOut } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -311,6 +311,23 @@ export default function ChatPanel() {
     if (!trimmed) return;
     autoStarted.current = true;
     createSession(trimmed);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setSessionStatus("input_user");
+    setUserId("");
+    setSessionId("");
+    setUserIdInput("");
+    setMessages([]);
+    setInput("");
+    setWidgetsMeta([]);
+    setPendingForm(null);
+    setFormValues({});
+    setCurrentAgent("root_agent");
+    setSelectedAgent("root_agent");
+    clearAllWindows();
+    autoStarted.current = false;
   };
 
   const sendTextToAdk = useCallback(
@@ -841,14 +858,24 @@ export default function ChatPanel() {
           </button>
         )}
         {sessionStatus === "ready" && (
-          <button
-            className="h-7 px-2.5 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md flex items-center gap-1 transition-colors disabled:opacity-50"
-            onClick={saveNotebook}
-            disabled={isSaving || messages.length === 0}
-          >
-            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-            저장
-          </button>
+          <>
+            <button
+              className="h-7 px-2.5 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md flex items-center gap-1 transition-colors disabled:opacity-50"
+              onClick={saveNotebook}
+              disabled={isSaving || messages.length === 0}
+            >
+              {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              저장
+            </button>
+            <button
+              className="h-7 px-2.5 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md flex items-center gap-1 transition-colors"
+              onClick={handleLogout}
+              title="로그아웃"
+            >
+              <LogOut size={12} />
+              로그아웃
+            </button>
+          </>
         )}
         {isSending && (
           <span className="text-xs text-blue-600 flex items-center gap-1.5">
