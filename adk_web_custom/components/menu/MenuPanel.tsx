@@ -210,8 +210,8 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                 : "border-transparent hover:border-slate-200"
             }`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-1">
+              <div className="flex-1 min-w-0 pr-1">
                 <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
                   {nb.title}
                 </div>
@@ -224,22 +224,22 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 flex-shrink-0">
                 <button
                   onClick={(e) => handleShare(nb, e)}
-                  className={`p-1 rounded hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-opacity ${
-                    nb.is_shared ? "text-blue-500" : "text-slate-400"
+                  className={`p-1 rounded hover:bg-slate-100 transition-colors ${
+                    nb.is_shared ? "text-blue-500" : "text-slate-300 group-hover:text-slate-400"
                   }`}
                   title={nb.is_shared ? "공유 해제" : "공유하기"}
                 >
-                  <Share2 size={14} />
+                  <Share2 size={13} />
                 </button>
                 <button
                   onClick={(e) => handleDelete(nb.notebook_id, e)}
-                  className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                  className="p-1 rounded hover:bg-red-50 text-slate-300 group-hover:text-slate-400 hover:text-red-500 transition-colors"
                   title="삭제"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             </div>
@@ -265,8 +265,8 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                 : "border-transparent hover:border-slate-200"
             }`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-1">
+              <div className="flex-1 min-w-0 pr-1">
                 <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
                   {nb.title}
                 </div>
@@ -274,22 +274,22 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                   {nb.user_id} · {formatDate(nb.updated_at)}
                 </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 flex-shrink-0">
                 {nb.user_id === userId && (
                   <button
                     onClick={(e) => handleShare(nb, e)}
-                    className="p-1 rounded hover:bg-slate-100 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 rounded hover:bg-slate-100 text-blue-500 group-hover:opacity-100 transition-colors"
                     title="공유 해제"
                   >
-                    <Share2 size={14} />
+                    <Share2 size={13} />
                   </button>
                 )}
                 <button
                   onClick={(e) => handleDelete(nb.notebook_id, e)}
-                  className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                  className="p-1 rounded hover:bg-red-50 text-slate-300 group-hover:text-slate-400 hover:text-red-500 transition-colors"
                   title="삭제"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             </div>

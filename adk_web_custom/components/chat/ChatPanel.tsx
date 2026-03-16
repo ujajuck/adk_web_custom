@@ -222,6 +222,8 @@ export default function ChatPanel() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const creatingRef = useRef(false);
 
+  const autoStarted = useRef(false);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -294,9 +296,20 @@ export default function ChatPanel() {
     }
   }, []);
 
+  // 저장된 userId가 있으면 앱 시작 시 자동으로 세션 생성
+  useEffect(() => {
+    if (autoStarted.current) return;
+    const savedId = localStorage.getItem(STORAGE_KEY);
+    if (savedId) {
+      autoStarted.current = true;
+      createSession(savedId);
+    }
+  }, [createSession]);
+
   const handleStartSession = () => {
     const trimmed = userIdInput.trim();
     if (!trimmed) return;
+    autoStarted.current = true;
     createSession(trimmed);
   };
 

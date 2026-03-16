@@ -20,6 +20,7 @@ class NotebookCreate(BaseModel):
     session_id: str
     title: str
     messages: List[dict]
+    metadata: Optional[dict] = None
 
 
 class NotebookUpdate(BaseModel):
@@ -37,6 +38,7 @@ class NotebookResponse(BaseModel):
     session_id: str
     title: str
     messages: List[dict]
+    metadata: Optional[dict] = None
     is_shared: bool
     created_at: str
     updated_at: str
@@ -48,15 +50,16 @@ async def create_notebook(req: NotebookCreate):
     notebook_id = f"nb_{uuid.uuid4().hex[:12]}"
     now = datetime.utcnow().isoformat()
     messages_json = json.dumps(req.messages, ensure_ascii=False)
+    metadata_json = json.dumps(req.metadata or {}, ensure_ascii=False)
 
     db = await get_db()
     try:
         await db.execute(
             """
-            INSERT INTO notebooks (notebook_id, user_id, session_id, title, messages, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO notebooks (notebook_id, user_id, session_id, title, messages, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (notebook_id, req.user_id, req.session_id, req.title, messages_json, now, now),
+            (notebook_id, req.user_id, req.session_id, req.title, messages_json, metadata_json, now, now),
         )
         await db.commit()
     finally:
@@ -68,6 +71,7 @@ async def create_notebook(req: NotebookCreate):
         session_id=req.session_id,
         title=req.title,
         messages=req.messages,
+        metadata=req.metadata,
         is_shared=False,
         created_at=now,
         updated_at=now,
@@ -81,7 +85,7 @@ async def get_user_notebooks(user_id: str):
     try:
         cursor = await db.execute(
             """
-            SELECT notebook_id, user_id, session_id, title, messages, is_shared, created_at, updated_at
+            SELECT notebook_id, user_id, session_id, title, messages, metadata, is_shared, created_at, updated_at
             FROM notebooks
             WHERE user_id = ?
             ORDER BY updated_at DESC
@@ -99,6 +103,7 @@ async def get_user_notebooks(user_id: str):
             session_id=row["session_id"],
             title=row["title"],
             messages=json.loads(row["messages"]),
+            metadata=json.loads(row["metadata"] or "{}"),
             is_shared=bool(row["is_shared"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -114,7 +119,7 @@ async def get_shared_notebooks():
     try:
         cursor = await db.execute(
             """
-            SELECT notebook_id, user_id, session_id, title, messages, is_shared, created_at, updated_at
+            SELECT notebook_id, user_id, session_id, title, messages, metadata, is_shared, created_at, updated_at
             FROM notebooks
             WHERE is_shared = 1
             ORDER BY updated_at DESC
@@ -131,6 +136,7 @@ async def get_shared_notebooks():
             session_id=row["session_id"],
             title=row["title"],
             messages=json.loads(row["messages"]),
+            metadata=json.loads(row["metadata"] or "{}"),
             is_shared=bool(row["is_shared"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -146,7 +152,7 @@ async def get_notebook(notebook_id: str):
     try:
         cursor = await db.execute(
             """
-            SELECT notebook_id, user_id, session_id, title, messages, is_shared, created_at, updated_at
+            SELECT notebook_id, user_id, session_id, title, messages, metadata, is_shared, created_at, updated_at
             FROM notebooks
             WHERE notebook_id = ?
             """,
@@ -187,7 +193,7 @@ async def toggle_share(notebook_id: str, req: NotebookShare):
 
         cursor = await db.execute(
             """
-            SELECT notebook_id, user_id, session_id, title, messages, is_shared, created_at, updated_at
+            SELECT notebook_id, user_id, session_id, title, messages, metadata, is_shared, created_at, updated_at
             FROM notebooks WHERE notebook_id = ?
             """,
             (notebook_id,),

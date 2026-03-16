@@ -325,6 +325,26 @@ export default function FlowGraphWidget({
       }
     });
 
+    // roundRect 폴백 헬퍼 (일부 환경 미지원 대비)
+    const drawRoundRect = (
+      x: number, y: number, w: number, h: number, r: number
+    ) => {
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x, y, w, h, r);
+      } else {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      }
+    };
+
     // Draw nodes
     layoutNodes.forEach((node) => {
       const isHovered = hoveredNode?.id === node.id;
@@ -332,13 +352,13 @@ export default function FlowGraphWidget({
       const centerY = node.y + node.height / 2;
 
       if (node.isTool) {
-        // Tool: 사각형
+        // Tool: 둥근 사각형
         ctx.beginPath();
-        ctx.roundRect(node.x, node.y, node.width, node.height, 6);
+        drawRoundRect(node.x, node.y, node.width, node.height, 6);
         ctx.fillStyle = isHovered ? "#6b5a8d" : "#4a3d6b";
         ctx.fill();
         ctx.strokeStyle = isHovered ? "#ffffff" : "#9b8dc3";
-        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.lineWidth = isHovered ? 2 : 1.5;
         ctx.stroke();
       } else {
         // Artifact: 원형
@@ -348,16 +368,19 @@ export default function FlowGraphWidget({
         ctx.fillStyle = isHovered ? "#3d6b52" : "#2b5a42";
         ctx.fill();
         ctx.strokeStyle = isHovered ? "#ffffff" : "#5a9d7e";
-        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.lineWidth = isHovered ? 2 : 1.5;
         ctx.stroke();
       }
 
       // Label
-      ctx.font = "11px system-ui";
+      ctx.font = `bold 11px system-ui`;
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(node.label, centerX, centerY);
+      // 텍스트 클리핑 (node 영역 안에만)
+      const maxW = node.width - 8;
+      const text = node.label;
+      ctx.fillText(text, centerX, centerY, maxW);
     });
   }, [filteredData, layoutNodes, layoutEdges, hoveredNode]);
 
