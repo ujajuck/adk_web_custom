@@ -163,6 +163,8 @@ interface FormField {
   placeholder?: string;
   required?: boolean;
   options?: FormFieldOption[];
+  unit_options?: FormFieldOption[];
+  default_unit?: string;
   min?: number;
   max?: number;
   step?: number;
@@ -417,10 +419,14 @@ export default function ChatPanel() {
         // 동적 폼 트리거
         if (json?.frontend_data?.type === "input_form") {
           const formData = json.frontend_data as FrontendFormData;
-          // 각 필드의 default 값으로 초기화
+          // 각 필드의 default 값으로 초기화 (unit_options가 있으면 __unit도 초기화)
           const initValues: Record<string, string | number> = {};
           for (const f of formData.fields) {
             initValues[f.name] = f.default ?? (f.type === "number" ? 0 : "");
+            if (f.unit_options?.length) {
+              initValues[`${f.name}__unit`] =
+                f.default_unit ?? f.unit_options[0]?.value ?? "";
+            }
           }
           setFormValues(initValues);
           setPendingForm(formData);
@@ -904,33 +910,73 @@ export default function ChatPanel() {
                         ))}
                       </select>
                     ) : field.type === "number" ? (
-                      <input
-                        type="number"
-                        className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                        value={formValues[field.name] ?? field.default ?? ""}
-                        required={field.required}
-                        min={field.min}
-                        max={field.max}
-                        step={field.step}
-                        placeholder={field.placeholder}
-                        onChange={(e) =>
-                          setFormValues((v) => ({
-                            ...v,
-                            [field.name]: e.target.valueAsNumber,
-                          }))
-                        }
-                      />
+                      <div className="flex gap-1.5">
+                        <input
+                          type="number"
+                          className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                          value={formValues[field.name] ?? field.default ?? ""}
+                          required={field.required}
+                          min={field.min}
+                          max={field.max}
+                          step={field.step}
+                          placeholder={field.placeholder}
+                          onChange={(e) =>
+                            setFormValues((v) => ({
+                              ...v,
+                              [field.name]: e.target.valueAsNumber,
+                            }))
+                          }
+                        />
+                        {field.unit_options?.length ? (
+                          <select
+                            className="h-9 px-2 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white shrink-0"
+                            value={String(formValues[`${field.name}__unit`] ?? "")}
+                            onChange={(e) =>
+                              setFormValues((v) => ({
+                                ...v,
+                                [`${field.name}__unit`]: e.target.value,
+                              }))
+                            }
+                          >
+                            {field.unit_options.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </div>
                     ) : (
-                      <input
-                        type="text"
-                        className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                        value={String(formValues[field.name] ?? field.default ?? "")}
-                        required={field.required}
-                        placeholder={field.placeholder}
-                        onChange={(e) =>
-                          setFormValues((v) => ({ ...v, [field.name]: e.target.value }))
-                        }
-                      />
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                          value={String(formValues[field.name] ?? field.default ?? "")}
+                          required={field.required}
+                          placeholder={field.placeholder}
+                          onChange={(e) =>
+                            setFormValues((v) => ({ ...v, [field.name]: e.target.value }))
+                          }
+                        />
+                        {field.unit_options?.length ? (
+                          <select
+                            className="h-9 px-2 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white shrink-0"
+                            value={String(formValues[`${field.name}__unit`] ?? "")}
+                            onChange={(e) =>
+                              setFormValues((v) => ({
+                                ...v,
+                                [`${field.name}__unit`]: e.target.value,
+                              }))
+                            }
+                          >
+                            {field.unit_options.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 ))}
