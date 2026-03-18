@@ -21,6 +21,7 @@ export default function WorkspacePanel() {
     bringToFront,
     closeWindow,
     checkedWidgets,
+    setViewportSize,
   } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
 
@@ -33,6 +34,21 @@ export default function WorkspacePanel() {
     window.addEventListener("workspace:focus", handler);
     return () => window.removeEventListener("workspace:focus", handler);
   }, [bringToFront]);
+
+  // 실제 워크스페이스 크기를 context에 전달 (위젯 초기 배치에 사용)
+  useEffect(() => {
+    const el = boundsRef.current;
+    if (!el) return;
+    const HEADER_H_CONST = 48;
+    const obs = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setViewportSize(width, height - HEADER_H_CONST);
+    });
+    obs.observe(el);
+    // 초기값 설정
+    setViewportSize(el.clientWidth, el.clientHeight - HEADER_H_CONST);
+    return () => obs.disconnect();
+  }, [setViewportSize]);
 
   // Track minimized state and saved sizes
   const [minimized, setMinimized] = useState<Record<string, boolean>>({});
