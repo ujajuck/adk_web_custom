@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 import { X, Minus, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,16 @@ export default function WorkspacePanel() {
     checkedWidgets,
   } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
+
+  // workspace:focus 이벤트 수신 → 해당 윈도우를 맨 앞으로
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { windowId } = (e as CustomEvent<{ windowId: string }>).detail;
+      if (windowId) bringToFront(windowId);
+    };
+    window.addEventListener("workspace:focus", handler);
+    return () => window.removeEventListener("workspace:focus", handler);
+  }, [bringToFront]);
 
   // Track minimized state and saved sizes
   const [minimized, setMinimized] = useState<Record<string, boolean>>({});
@@ -148,7 +158,7 @@ export default function WorkspacePanel() {
       />
 
       <div
-        className="relative overflow-hidden"
+        className="relative overflow-y-auto overflow-x-hidden"
         style={{
           height: `calc(100% - ${HEADER_H}px)`,
           minHeight: `calc(100dvh - ${HEADER_H}px)`,

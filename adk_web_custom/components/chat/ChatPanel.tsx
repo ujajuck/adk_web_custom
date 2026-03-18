@@ -411,12 +411,15 @@ export default function ChatPanel() {
         for (const csv of csvFiles) {
           if (csv.file_id && csv.filename) {
             const widgetTitle = toolName ? `${toolName}_${csv.filename}` : csv.filename;
-            addCsvFileWindow(widgetTitle, csv.file_id);
+            const winId = addCsvFileWindow(widgetTitle, csv.file_id);
             setWidgetsMeta((prev) => [
               ...prev,
               { type: "csvFile", title: widgetTitle, fileId: csv.file_id },
             ]);
-            pushMsg("assistant", `CSV를 워크스페이스에 열었어요: ${widgetTitle}`);
+            setMessages((m) => [
+              ...m,
+              { role: "assistant", text: `CSV: ${widgetTitle}`, windowId: winId },
+            ]);
           }
         }
 
@@ -426,12 +429,15 @@ export default function ChatPanel() {
         for (const pf of plotlyFigs) {
           if (pf.fig && pf.title) {
             const widgetTitle = toolName ? `${toolName}_${pf.title}` : pf.title;
-            addPlotlyWindow(widgetTitle, pf.fig);
+            const winId = addPlotlyWindow(widgetTitle, pf.fig);
             setWidgetsMeta((prev) => [
               ...prev,
               { type: "plotly", title: widgetTitle, fig: pf.fig },
             ]);
-            pushMsg("assistant", `그래프를 워크스페이스에 열었어요: ${widgetTitle}`);
+            setMessages((m) => [
+              ...m,
+              { role: "assistant", text: `그래프: ${widgetTitle}`, windowId: winId },
+            ]);
           }
         }
 
@@ -893,6 +899,27 @@ export default function ChatPanel() {
       >
         {messages.map((m, i) => {
           const isUser = m.role === "user";
+          // 위젯 연결 메시지 (클릭 시 위젯 포커스)
+          if (m.windowId) {
+            const isChart = m.text.startsWith("그래프:");
+            return (
+              <div key={i} className="flex justify-start">
+                <button
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl rounded-bl-md text-sm bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent("workspace:focus", { detail: { windowId: m.windowId } }),
+                    )
+                  }
+                  title="클릭하면 워크스페이스에서 해당 위젯으로 이동"
+                >
+                  <span className="text-base">{isChart ? "📊" : "📋"}</span>
+                  <span className="font-medium truncate max-w-[240px]">{m.text}</span>
+                  <span className="text-xs text-indigo-400 shrink-0">↗ 보기</span>
+                </button>
+              </div>
+            );
+          }
           return (
             <div
               key={i}

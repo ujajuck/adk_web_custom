@@ -57,7 +57,7 @@ function calculateLayout(
 ): { layoutNodes: LayoutNode[]; layoutEdges: LayoutEdge[] } {
   if (nodes.length === 0) return { layoutNodes: [], layoutEdges: [] };
 
-  const nodeWidth = 100;
+  const nodeWidth = 120;
   const nodeHeight = 40;
   const horizontalGap = 60;
   const verticalGap = 25;
@@ -138,11 +138,18 @@ function calculateLayout(
     levelCounts.set(toolLevel, idx + 1);
 
     const toolNodeId = `tool_${edge.id}`;
-    const toolLabel = edge.label || edge.tool_name || "tool";
+    // {아티팩트명:툴명} 형식 — 툴명 없으면 아티팩트명, 둘 다 없으면 edge.label 또는 "tool"
+    const targetNode = nodes.find((n) => n.id === edge.target);
+    const artifactName =
+      targetNode?.artifact_name || targetNode?.label || edge.label || "";
+    const toolName = edge.tool_name || "";
+    const rawLabel = artifactName && toolName
+      ? `${artifactName}:${toolName}`
+      : artifactName || toolName || edge.label || "tool";
 
     layoutNodes.push({
       id: toolNodeId,
-      label: toolLabel.length > 12 ? toolLabel.slice(0, 10) + ".." : toolLabel,
+      label: rawLabel.length > 18 ? rawLabel.slice(0, 16) + ".." : rawLabel,
       x: 40 + toolLevel * (nodeWidth + horizontalGap),
       y: 60 + idx * (nodeHeight + verticalGap),
       width: nodeWidth,
@@ -485,31 +492,37 @@ export default function FlowGraphWidget({
             top: hoveredNode.y + 40,
           }}
         >
-          <div className="font-medium">{hoveredNode.label}</div>
-          {hoveredNode.originalNode?.artifact_name && (
-            <div className="text-xs text-slate-400">
-              {hoveredNode.originalNode.artifact_name}
-            </div>
+          <div className="font-medium mb-1">{hoveredNode.label}</div>
+          {hoveredNode.isTool ? (
+            <>
+              {hoveredNode.originalEdge?.tool_name && (
+                <div className="text-xs text-slate-400">Tool: {hoveredNode.originalEdge.tool_name}</div>
+              )}
+              {(() => {
+                const targetArtifact = filteredData?.nodes.find(
+                  (n) => n.id === hoveredNode.originalEdge?.target
+                );
+                const name = targetArtifact?.artifact_name || targetArtifact?.label;
+                return name ? (
+                  <div className="text-xs text-green-400">→ {name}</div>
+                ) : null;
+              })()}
+              <div className="mt-1 text-xs text-slate-500">Tool</div>
+            </>
+          ) : (
+            <>
+              {hoveredNode.originalNode?.artifact_name && (
+                <div className="text-xs text-green-400">{hoveredNode.originalNode.artifact_name}</div>
+              )}
+              {filteredData && (() => {
+                const creatingEdge = filteredData.edges.find((e) => e.target === hoveredNode.id);
+                return creatingEdge?.tool_name ? (
+                  <div className="text-xs text-purple-400">생성 툴: {creatingEdge.tool_name}</div>
+                ) : null;
+              })()}
+              <div className="mt-1 text-xs text-slate-500">Artifact</div>
+            </>
           )}
-          {hoveredNode.originalEdge?.tool_name && (
-            <div className="text-xs text-slate-400">
-              {hoveredNode.originalEdge.tool_name}
-            </div>
-          )}
-          {/* artifact 노드: 이 아티팩트를 생성한 tool 표시 */}
-          {!hoveredNode.isTool && filteredData && (() => {
-            const creatingEdge = filteredData.edges.find(
-              (e) => e.target === hoveredNode.id
-            );
-            return creatingEdge ? (
-              <div className="text-xs text-purple-400">
-                생성 툴: {creatingEdge.tool_name}
-              </div>
-            ) : null;
-          })()}
-          <div className="mt-1 text-xs text-slate-500">
-            {hoveredNode.isTool ? "Tool" : "Artifact"}
-          </div>
         </div>
       )}
 

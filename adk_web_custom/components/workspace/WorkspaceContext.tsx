@@ -35,11 +35,11 @@ type Ctx = {
   checkedWidgets: string[]; // 체크된 위젯 ID 목록
   addTableWindow: (title: string, csvText: string) => void;
   addCsvTableWindow: (title: string, src: string) => void;
-  addCsvFileWindow: (title: string, fileId: string) => void;
+  addCsvFileWindow: (title: string, fileId: string) => string;
   addPlotlyWindow: (
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
-  ) => void;
+  ) => string;
   addFlowGraphWindow: (title: string, sessionId: string) => void;
   updateWindow: (
     id: string,
@@ -138,7 +138,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
-  function addCsvFileWindow(title: string, fileId: string) {
+  function addCsvFileWindow(title: string, fileId: string): string {
     const id = nextId("win");
     const widgetId = nextId("csvf");
     const z = zTop + 1;
@@ -162,12 +162,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         },
       ];
     });
+    return id;
   }
 
   function addPlotlyWindow(
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
-  ) {
+  ): string {
     const id = nextId("win");
     const widgetId = nextId("plt");
     const z = zTop + 1;
@@ -191,6 +192,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         },
       ];
     });
+    return id;
   }
 
   function addFlowGraphWindow(title: string, sessionId: string) {
