@@ -150,10 +150,8 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
     }
   };
 
-  if (collapsed) return null;
-
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className={`h-full flex flex-col bg-slate-50${collapsed ? " hidden" : ""}`}>
       {/* 헤더 */}
       <div className="px-4 py-3 flex items-center justify-between border-b bg-white">
         <span className="font-semibold text-slate-800">노트북</span>
@@ -179,7 +177,9 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
       {/* 새 노트북 버튼 */}
       <div className="px-3 py-2">
         <button
-          onClick={() => window.location.reload()}
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("chat:new-session"))
+          }
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors"
         >
           <Plus size={16} />
@@ -188,7 +188,7 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
       </div>
 
       {/* 목록 */}
-      <ScrollArea className="flex-1 px-3">
+      <ScrollArea className="flex-1 px-2">
         <div className="flex items-center gap-1.5 px-1 py-2 text-xs font-medium text-slate-500 uppercase tracking-wide">
           <FileText size={12} />
           내 노트북 ({myNotebooks.length})
@@ -202,14 +202,14 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
           <div
             key={nb.notebook_id}
             onClick={() => handleSelectNotebook(nb)}
-            className={`w-full text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
+            className={`w-full min-w-0 text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
               selectedNotebook?.notebook_id === nb.notebook_id
                 ? "bg-white border-blue-200 shadow-sm"
                 : "border-transparent hover:border-slate-200"
             }`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-1 min-w-0">
+              <div className="flex-1 min-w-0 pr-1">
                 <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
                   {nb.title}
                 </div>
@@ -222,22 +222,22 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-0.5 flex-shrink-0">
                 <button
                   onClick={(e) => handleShare(nb, e)}
-                  className={`p-1 rounded hover:bg-slate-100 ${
-                    nb.is_shared ? "text-blue-500" : "text-slate-400"
+                  className={`p-1 rounded hover:bg-slate-100 transition-colors ${
+                    nb.is_shared ? "text-blue-500" : "text-slate-300 group-hover:text-slate-400"
                   }`}
                   title={nb.is_shared ? "공유 해제" : "공유하기"}
                 >
-                  <Share2 size={14} />
+                  <Share2 size={13} />
                 </button>
                 <button
                   onClick={(e) => handleDelete(nb.notebook_id, e)}
-                  className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                  className="p-1 rounded hover:bg-red-50 text-slate-300 group-hover:text-slate-400 hover:text-red-500 transition-colors"
                   title="삭제"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             </div>
@@ -257,14 +257,14 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
           <div
             key={`shared_${nb.notebook_id}`}
             onClick={() => handleSelectNotebook(nb)}
-            className={`w-full text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
+            className={`w-full min-w-0 text-left px-3 py-2.5 mb-1 rounded-lg hover:bg-white hover:shadow-sm border transition-all group cursor-pointer ${
               selectedNotebook?.notebook_id === nb.notebook_id
                 ? "bg-white border-blue-200 shadow-sm"
                 : "border-transparent hover:border-slate-200"
             }`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-1 min-w-0">
+              <div className="flex-1 min-w-0 pr-1">
                 <div className="font-medium text-sm text-slate-700 group-hover:text-slate-900 truncate">
                   {nb.title}
                 </div>
@@ -272,24 +272,24 @@ export default function MenuPanel({ collapsed, onCollapse }: Props) {
                   {nb.user_id} · {formatDate(nb.updated_at)}
                 </div>
               </div>
-              {nb.user_id === userId && (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                {nb.user_id === userId && (
                   <button
                     onClick={(e) => handleShare(nb, e)}
-                    className="p-1 rounded hover:bg-slate-100 text-blue-500"
+                    className="p-1 rounded hover:bg-slate-100 text-blue-500 group-hover:opacity-100 transition-colors"
                     title="공유 해제"
                   >
-                    <Share2 size={14} />
+                    <Share2 size={13} />
                   </button>
-                  <button
-                    onClick={(e) => handleDelete(nb.notebook_id, e)}
-                    className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
-                    title="삭제"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={(e) => handleDelete(nb.notebook_id, e)}
+                  className="p-1 rounded hover:bg-red-50 text-slate-300 group-hover:text-slate-400 hover:text-red-500 transition-colors"
+                  title="삭제"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </div>
           </div>
         ))}

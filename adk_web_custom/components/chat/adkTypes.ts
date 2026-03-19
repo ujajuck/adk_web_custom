@@ -1,4 +1,4 @@
-export type Msg = { role: "user" | "assistant"; text: string };
+export type Msg = { role: "user" | "assistant"; text: string; windowId?: string };
 
 export type AdkEvent = {
   content?: {

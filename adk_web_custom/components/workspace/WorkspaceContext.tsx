@@ -35,12 +35,13 @@ type Ctx = {
   checkedWidgets: string[]; // 체크된 위젯 ID 목록
   addTableWindow: (title: string, csvText: string) => void;
   addCsvTableWindow: (title: string, src: string) => void;
-  addCsvFileWindow: (title: string, fileId: string) => void;
+  addCsvFileWindow: (title: string, fileId: string) => string;
   addPlotlyWindow: (
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
-  ) => void;
+  ) => string;
   addFlowGraphWindow: (title: string, sessionId: string) => void;
+  setViewportSize: (w: number, h: number) => void;
   updateWindow: (
     id: string,
     patch: Partial<Pick<WorkspaceWindow, "x" | "y" | "w" | "h">>,
@@ -48,6 +49,7 @@ type Ctx = {
   toggleWindowCheck: (id: string) => void;
   bringToFront: (id: string) => void;
   closeWindow: (id: string) => void;
+  clearAllWindows: () => void;
 };
 
 const WorkspaceContext = createContext<Ctx | null>(null);
@@ -55,33 +57,42 @@ const WorkspaceContext = createContext<Ctx | null>(null);
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [windows, setWindows] = useState<WorkspaceWindow[]>([]);
   const [zTop, setZTop] = useState(1);
+  // 워크스페이스 실제 크기 (WorkspacePanel이 ResizeObserver로 업데이트)
+  const [vpW, setVpW] = useState(0);
+  const [vpH, setVpH] = useState(0);
+
+  function setViewportSize(w: number, h: number) {
+    setVpW(w);
+    setVpH(h);
+  }
 
   function nextId(prefix: string) {
     return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
 
-  // 새 윈도우 위치 계산 (캐스케이드 + 그리드 혼합)
+  // 새 윈도우 위치 계산 — 현재 뷰포트 기준으로 화면 안에 들어오도록 배치
   function calcNewPosition(
     existingCount: number,
     width: number,
     height: number,
   ): { x: number; y: number } {
-    const cols = 3; // 3열로 배치
-    const baseX = 20;
-    const baseY = 60;
-    const gapX = width + 40; // 윈도우 폭 + 간격
-    const gapY = height + 40;
+    const vw = vpW > 0 ? vpW : 900;
+    const vh = vpH > 0 ? vpH : 600;
+    const margin = 20;
 
+    // 한 행에 들어갈 수 있는 열 수
+    const cols = Math.max(1, Math.floor((vw - margin) / (width + margin)));
     const col = existingCount % cols;
     const row = Math.floor(existingCount / cols);
 
-    // 같은 셀에 있으면 약간씩 오프셋
-    const cellCount = Math.floor(existingCount / cols);
-    const offset = (existingCount % 3) * 30;
+    // 열 간격: 뷰포트 너비를 cols 등분
+    const colW = Math.floor((vw - margin) / cols);
+    const x = margin + col * colW;
+    const y = margin + row * (height + margin) + (existingCount % 4) * 15;
 
     return {
-      x: baseX + col * gapX + offset,
-      y: baseY + row * gapY + offset,
+      x: Math.min(x, Math.max(margin, vw - width - margin)),
+      y: Math.min(y, Math.max(margin, vh - height / 2)),
     };
   }
 
@@ -137,7 +148,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
-  function addCsvFileWindow(title: string, fileId: string) {
+  function addCsvFileWindow(title: string, fileId: string): string {
     const id = nextId("win");
     const widgetId = nextId("csvf");
     const z = zTop + 1;
@@ -161,12 +172,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         },
       ];
     });
+    return id;
   }
 
   function addPlotlyWindow(
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
-  ) {
+  ): string {
     const id = nextId("win");
     const widgetId = nextId("plt");
     const z = zTop + 1;
@@ -190,6 +202,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         },
       ];
     });
+    return id;
   }
 
   function addFlowGraphWindow(title: string, sessionId: string) {
@@ -244,6 +257,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setWindows((prev) => prev.filter((w) => w.id !== id));
   }
 
+  function clearAllWindows() {
+    setWindows([]);
+  }
+
   // 체크된 위젯 ID 목록 (flowGraph 제외)
   const checkedWidgets = useMemo(
     () =>
@@ -262,12 +279,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       addCsvFileWindow,
       addPlotlyWindow,
       addFlowGraphWindow,
+      setViewportSize,
       updateWindow,
       toggleWindowCheck,
       bringToFront,
       closeWindow,
+      clearAllWindows,
     }),
-    [windows, checkedWidgets],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [windows, checkedWidgets, vpW, vpH],
   );
 
   return (

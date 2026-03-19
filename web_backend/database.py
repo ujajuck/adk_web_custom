@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS notebooks (
     session_id  TEXT NOT NULL,
     title       TEXT NOT NULL,
     messages    TEXT DEFAULT '[]',
+    metadata    TEXT DEFAULT '{}',
     is_shared   INTEGER DEFAULT 0,
     created_at  TEXT DEFAULT (datetime('now')),
     updated_at  TEXT DEFAULT (datetime('now'))
@@ -43,7 +44,14 @@ CREATE INDEX IF NOT EXISTS idx_notebooks_shared ON notebooks(is_shared);
 async def init_db() -> None:
     async with aiosqlite.connect(settings.DB_PATH) as db:
         await db.executescript(_SCHEMA)
-        await db.commit()
+        # 기존 DB에 metadata 컬럼 추가 (없는 경우만)
+        try:
+            await db.execute(
+                "ALTER TABLE notebooks ADD COLUMN metadata TEXT DEFAULT '{}'"
+            )
+            await db.commit()
+        except Exception:
+            pass  # 이미 컬럼이 존재하면 무시
 
 
 async def get_db() -> aiosqlite.Connection:

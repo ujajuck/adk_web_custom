@@ -148,6 +148,53 @@ def extract_plotly_urls(text: str) -> list[str]:
     return _PLOTLY_URL_PATTERN.findall(text)
 
 
+def extract_frontend_trigger(events: Any) -> dict[str, Any] | None:
+    """Extract frontend_data from session stateDelta if frontend_trigger is truthy.
+
+    ADK agents can set session state via actions.stateDelta.
+    When stateDelta contains {frontend_trigger: true, frontend_data: {...}},
+    this function returns the frontend_data dict.
+    frontend_data may arrive as a JSON string – we parse it automatically.
+    """
+    if not isinstance(events, list):
+        return None
+    for ev in events:
+        actions = ev.get("actions") or {}
+        state_delta = actions.get("stateDelta") or {}
+        if not state_delta.get("frontend_trigger"):
+            continue
+        raw = state_delta.get("frontend_data")
+        # ADK 세션 상태 값이 JSON 문자열로 저장될 수 있음
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(raw, dict):
+            continue
+        # fields 내 name 없는 항목 방어: name 없으면 index 기반 키 부여
+        fields = raw.get("fields")
+        if isinstance(fields, list):
+            for i, f in enumerate(fields):
+                if isinstance(f, dict) and not f.get("name"):
+                    f["name"] = f.get("field_name") or f.get("key") or f"field_{i}"
+        return raw
+    return None
+
+
+def extract_responding_agent(events: Any) -> str:
+    """Extract the name of the last agent that responded (from event 'author' field)."""
+    if not isinstance(events, list):
+        return "root_agent"
+    last_author = "root_agent"
+    for ev in reversed(events):
+        author = ev.get("author")
+        if author and author != "user":
+            last_author = author
+            break
+    return last_author
+
+
 def extract_resource_links_from_events(events: Any) -> list[str]:
     """Extract resource_link URIs from tool outputs in ADK events.
 

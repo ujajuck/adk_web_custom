@@ -18,9 +18,11 @@ from ..services.plotly_store import plotly_store
 from ..services.response_parser import (
     extract_artifact_delta,
     extract_assistant_text,
+    extract_frontend_trigger,
     extract_plotly_fig,
     extract_plotly_urls,
     extract_resource_links_from_events,
+    extract_responding_agent,
 )
 from ..services.plotly_fetcher import fetch_plotly_from_url
 from ..services.flow_parser import parse_artifact_flow
@@ -54,7 +56,9 @@ async def chat(req: ChatRequest):
     job_id = f"job_{uuid.uuid4().hex[:12]}"
 
     try:
-        adk_result = await send_message_to_adk(req.user_id, req.session_id, req.message)
+        adk_result = await send_message_to_adk(
+            req.user_id, req.session_id, req.message, req.agent_name
+        )
         log.debug("ADK returned status=%s", adk_result.get("status"))
     except Exception as exc:
         log.error("ADK request failed: %s", exc, exc_info=True)
@@ -72,6 +76,8 @@ async def chat(req: ChatRequest):
     assistant_text = extract_assistant_text(events)
     artifact_delta = extract_artifact_delta(events)
     plotly_result = extract_plotly_fig(events)
+    responding_agent = extract_responding_agent(events)
+    frontend_data = extract_frontend_trigger(events)
 
     csv_metas: list[CsvFileMeta] = []
     plotly_metas: list[PlotlyFigMeta] = []
@@ -205,6 +211,8 @@ async def chat(req: ChatRequest):
         job_id=job_id,
         status="success",
         text=assistant_text,
+        responding_agent=responding_agent,
+        frontend_data=frontend_data,
         outputs=output_items,
         csv_files=csv_metas,
         plotly_figs=plotly_metas,

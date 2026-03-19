@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 import { X, Minus, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,8 +21,34 @@ export default function WorkspacePanel() {
     bringToFront,
     closeWindow,
     checkedWidgets,
+    setViewportSize,
   } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
+
+  // workspace:focus 이벤트 수신 → 해당 윈도우를 맨 앞으로
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { windowId } = (e as CustomEvent<{ windowId: string }>).detail;
+      if (windowId) bringToFront(windowId);
+    };
+    window.addEventListener("workspace:focus", handler);
+    return () => window.removeEventListener("workspace:focus", handler);
+  }, [bringToFront]);
+
+  // 실제 워크스페이스 크기를 context에 전달 (위젯 초기 배치에 사용)
+  useEffect(() => {
+    const el = boundsRef.current;
+    if (!el) return;
+    const HEADER_H_CONST = 48;
+    const obs = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setViewportSize(width, height - HEADER_H_CONST);
+    });
+    obs.observe(el);
+    // 초기값 설정
+    setViewportSize(el.clientWidth, el.clientHeight - HEADER_H_CONST);
+    return () => obs.disconnect();
+  }, [setViewportSize]);
 
   // Track minimized state and saved sizes
   const [minimized, setMinimized] = useState<Record<string, boolean>>({});
@@ -52,6 +78,10 @@ export default function WorkspacePanel() {
 
   const onFlow = () => {
     window.dispatchEvent(new CustomEvent("workspace:flow"));
+  };
+
+  const onSave = () => {
+    window.dispatchEvent(new CustomEvent("workspace:save"));
   };
 
 
@@ -140,10 +170,11 @@ export default function WorkspacePanel() {
         height={HEADER_H}
         onRefresh={onRefresh}
         onFlow={onFlow}
+        onSave={onSave}
       />
 
       <div
-        className="relative overflow-hidden"
+        className="relative overflow-y-auto overflow-x-hidden"
         style={{
           height: `calc(100% - ${HEADER_H}px)`,
           minHeight: `calc(100dvh - ${HEADER_H}px)`,

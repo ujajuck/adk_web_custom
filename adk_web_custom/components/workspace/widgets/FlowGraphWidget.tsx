@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Save, RefreshCw, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const API_URL =
@@ -22,6 +22,7 @@ interface FlowEdge {
   source: string;
   target: string;
   tool_name: string;
+  agent_name?: string;  // functionCall을 발행한 에이전트 (event.author)
   tool_args?: Record<string, any>;
   label?: string;
 }
@@ -57,7 +58,7 @@ function calculateLayout(
 ): { layoutNodes: LayoutNode[]; layoutEdges: LayoutEdge[] } {
   if (nodes.length === 0) return { layoutNodes: [], layoutEdges: [] };
 
-  const nodeWidth = 100;
+  const nodeWidth = 120;
   const nodeHeight = 40;
   const horizontalGap = 60;
   const verticalGap = 25;
@@ -138,11 +139,17 @@ function calculateLayout(
     levelCounts.set(toolLevel, idx + 1);
 
     const toolNodeId = `tool_${edge.id}`;
-    const toolLabel = edge.label || edge.tool_name || "tool";
+    // {agent_name}:{tool_name} 형식 — data_agent:dataset_get
+    // agent_name 없으면 tool_name만, 둘 다 없으면 edge.label
+    const agentName = edge.agent_name || "";
+    const toolFunc = edge.tool_name || "";
+    const rawLabel = agentName && toolFunc
+      ? `${agentName}:${toolFunc}`
+      : toolFunc || agentName || edge.label || "tool";
 
     layoutNodes.push({
       id: toolNodeId,
-      label: toolLabel.length > 12 ? toolLabel.slice(0, 10) + ".." : toolLabel,
+      label: rawLabel.length > 18 ? rawLabel.slice(0, 16) + ".." : rawLabel,
       x: 40 + toolLevel * (nodeWidth + horizontalGap),
       y: 60 + idx * (nodeHeight + verticalGap),
       width: nodeWidth,
@@ -184,10 +191,6 @@ export default function FlowGraphWidget({
   const [hoveredNode, setHoveredNode] = useState<LayoutNode | null>(null);
   const [layoutNodes, setLayoutNodes] = useState<LayoutNode[]>([]);
   const [layoutEdges, setLayoutEdges] = useState<LayoutEdge[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [showSavePanel, setShowSavePanel] = useState(false);
-  const [selectedForSave, setSelectedForSave] = useState<Set<string>>(new Set());
-
   // Fetch flow data
   const fetchFlow = useCallback(async () => {
     try {
@@ -329,6 +332,26 @@ export default function FlowGraphWidget({
       }
     });
 
+    // roundRect 폴백 헬퍼 (일부 환경 미지원 대비)
+    const drawRoundRect = (
+      x: number, y: number, w: number, h: number, r: number
+    ) => {
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x, y, w, h, r);
+      } else {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      }
+    };
+
     // Draw nodes
     layoutNodes.forEach((node) => {
       const isHovered = hoveredNode?.id === node.id;
@@ -336,13 +359,13 @@ export default function FlowGraphWidget({
       const centerY = node.y + node.height / 2;
 
       if (node.isTool) {
-        // Tool: 사각형
+        // Tool: 둥근 사각형
         ctx.beginPath();
-        ctx.roundRect(node.x, node.y, node.width, node.height, 6);
+        drawRoundRect(node.x, node.y, node.width, node.height, 6);
         ctx.fillStyle = isHovered ? "#6b5a8d" : "#4a3d6b";
         ctx.fill();
         ctx.strokeStyle = isHovered ? "#ffffff" : "#9b8dc3";
-        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.lineWidth = isHovered ? 2 : 1.5;
         ctx.stroke();
       } else {
         // Artifact: 원형
@@ -352,16 +375,19 @@ export default function FlowGraphWidget({
         ctx.fillStyle = isHovered ? "#3d6b52" : "#2b5a42";
         ctx.fill();
         ctx.strokeStyle = isHovered ? "#ffffff" : "#5a9d7e";
-        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.lineWidth = isHovered ? 2 : 1.5;
         ctx.stroke();
       }
 
       // Label
-      ctx.font = "11px system-ui";
+      ctx.font = `bold 11px system-ui`;
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(node.label, centerX, centerY);
+      // 텍스트 클리핑 (node 영역 안에만)
+      const maxW = node.width - 8;
+      const text = node.label;
+      ctx.fillText(text, centerX, centerY, maxW);
     });
   }, [filteredData, layoutNodes, layoutEdges, hoveredNode]);
 
@@ -393,83 +419,6 @@ export default function FlowGraphWidget({
     },
     [layoutNodes],
   );
-
-  // Get artifact windows (excluding flowGraph itself)
-  const artifactWindows = React.useMemo(() => {
-    return allWindows.filter((w) => w.widget.type !== "flowGraph");
-  }, [allWindows]);
-
-  // Toggle selection for an artifact
-  const toggleSelect = (title: string) => {
-    setSelectedForSave((prev) => {
-      const next = new Set(prev);
-      if (next.has(title)) {
-        next.delete(title);
-      } else {
-        next.add(title);
-      }
-      return next;
-    });
-  };
-
-  // Select/deselect all
-  const selectAll = () => {
-    setSelectedForSave(new Set(artifactWindows.map((w) => w.widget.title)));
-  };
-  const deselectAll = () => {
-    setSelectedForSave(new Set());
-  };
-
-  // Open save panel
-  const openSavePanel = () => {
-    // Initialize with all artifacts selected
-    setSelectedForSave(new Set(artifactWindows.map((w) => w.widget.title)));
-    setShowSavePanel(true);
-  };
-
-  // Save to notebook with selected items only
-  const handleSave = useCallback(async () => {
-    if (!filteredData) return;
-
-    setSaving(true);
-    try {
-      // Filter flow data to only include selected artifacts
-      const selectedNodes = filteredData.nodes.filter((n) =>
-        selectedForSave.has(n.label) || selectedForSave.size === 0
-      );
-      const selectedNodeIds = new Set(selectedNodes.map((n) => n.id));
-
-      // Include edges connected to selected nodes
-      const selectedEdges = filteredData.edges.filter(
-        (e) => selectedNodeIds.has(e.source) || selectedNodeIds.has(e.target)
-      );
-
-      const saveData = {
-        ...filteredData,
-        nodes: selectedNodes,
-        edges: selectedEdges,
-      };
-
-      // 노트북에 저장 이벤트 발생
-      window.dispatchEvent(
-        new CustomEvent("notebook:add", {
-          detail: {
-            type: "flow",
-            sessionId,
-            data: saveData,
-            selectedArtifacts: Array.from(selectedForSave),
-            title: `Flow Graph - ${new Date().toLocaleString()}`,
-          },
-        }),
-      );
-
-      setShowSavePanel(false);
-    } catch (err) {
-      console.error("Failed to save to notebook:", err);
-    } finally {
-      setSaving(false);
-    }
-  }, [filteredData, sessionId, selectedForSave]);
 
   if (loading) {
     return (
@@ -518,100 +467,13 @@ export default function FlowGraphWidget({
         <Button
           variant="secondary"
           size="sm"
-          onClick={openSavePanel}
-          disabled={saving || artifactWindows.length === 0}
-          className="h-8 gap-1.5 bg-slate-700 text-slate-200 hover:bg-slate-600"
-        >
-          <Save size={14} />
-          노트북에 저장
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="sm"
           onClick={fetchFlow}
           className="h-8 w-8 bg-slate-700 p-0 text-slate-200 hover:bg-slate-600"
           title="새로고침"
         >
           <RefreshCw size={14} />
         </Button>
-
-        {artifactWindows.length > 0 && (
-          <span className="ml-auto text-xs text-slate-400">
-            {artifactWindows.length}개 아티팩트
-          </span>
-        )}
       </div>
-
-      {/* Save panel with checkbox selection */}
-      {showSavePanel && (
-        <div className="absolute left-2 top-12 z-20 w-64 rounded border border-slate-600 bg-slate-800 shadow-lg">
-          <div className="flex items-center justify-between border-b border-slate-600 px-3 py-2">
-            <span className="text-sm font-medium text-slate-200">저장할 항목 선택</span>
-            <button
-              onClick={() => setShowSavePanel(false)}
-              className="rounded p-1 hover:bg-slate-700 text-slate-400"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          <div className="max-h-48 overflow-auto p-2">
-            {artifactWindows.length === 0 ? (
-              <div className="py-3 text-center text-xs text-slate-400">
-                저장 가능한 아티팩트가 없습니다
-              </div>
-            ) : (
-              <>
-                <div className="mb-2 flex items-center gap-2 border-b border-slate-700 pb-2">
-                  <button
-                    onClick={selectAll}
-                    className="text-xs text-blue-400 hover:text-blue-300"
-                  >
-                    전체 선택
-                  </button>
-                  <span className="text-slate-600">|</span>
-                  <button
-                    onClick={deselectAll}
-                    className="text-xs text-slate-400 hover:text-slate-300"
-                  >
-                    전체 해제
-                  </button>
-                </div>
-                {artifactWindows.map((win) => (
-                  <label
-                    key={win.id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-700"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedForSave.has(win.widget.title)}
-                      onChange={() => toggleSelect(win.widget.title)}
-                      className="h-3.5 w-3.5 rounded border-slate-500 bg-slate-700 text-blue-500"
-                    />
-                    <span className="truncate text-xs text-slate-300">{win.widget.title}</span>
-                  </label>
-                ))}
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between border-t border-slate-600 p-2">
-            <span className="text-xs text-slate-400">
-              {selectedForSave.size}개 선택됨
-            </span>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving || selectedForSave.size === 0}
-              className="h-7 gap-1 bg-blue-600 px-3 text-xs text-white hover:bg-blue-500"
-            >
-              <Save size={12} />
-              {saving ? "저장 중..." : "저장"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       <canvas
         ref={canvasRef}
@@ -630,20 +492,40 @@ export default function FlowGraphWidget({
             top: hoveredNode.y + 40,
           }}
         >
-          <div className="font-medium">{hoveredNode.label}</div>
-          {hoveredNode.originalNode?.artifact_name && (
-            <div className="text-xs text-slate-400">
-              {hoveredNode.originalNode.artifact_name}
-            </div>
+          <div className="font-medium mb-1">{hoveredNode.label}</div>
+          {hoveredNode.isTool ? (
+            <>
+              {hoveredNode.originalEdge?.agent_name && (
+                <div className="text-xs text-purple-400">Agent: {hoveredNode.originalEdge.agent_name}</div>
+              )}
+              {hoveredNode.originalEdge?.tool_name && (
+                <div className="text-xs text-slate-400">Fn: {hoveredNode.originalEdge.tool_name}</div>
+              )}
+              {(() => {
+                const targetArtifact = filteredData?.nodes.find(
+                  (n) => n.id === hoveredNode.originalEdge?.target
+                );
+                const name = targetArtifact?.artifact_name || targetArtifact?.label;
+                return name ? (
+                  <div className="text-xs text-green-400">→ {name}</div>
+                ) : null;
+              })()}
+              <div className="mt-1 text-xs text-slate-500">Tool</div>
+            </>
+          ) : (
+            <>
+              {hoveredNode.originalNode?.artifact_name && (
+                <div className="text-xs text-green-400">{hoveredNode.originalNode.artifact_name}</div>
+              )}
+              {filteredData && (() => {
+                const creatingEdge = filteredData.edges.find((e) => e.target === hoveredNode.id);
+                return creatingEdge?.tool_name ? (
+                  <div className="text-xs text-purple-400">생성 툴: {creatingEdge.tool_name}</div>
+                ) : null;
+              })()}
+              <div className="mt-1 text-xs text-slate-500">Artifact</div>
+            </>
           )}
-          {hoveredNode.originalEdge?.tool_name && (
-            <div className="text-xs text-slate-400">
-              {hoveredNode.originalEdge.tool_name}
-            </div>
-          )}
-          <div className="mt-1 text-xs text-slate-500">
-            {hoveredNode.isTool ? "Tool" : "Artifact"}
-          </div>
         </div>
       )}
 

@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import chat, csv_data, files, flow, notebooks, plotly_data, report, sessions
+from .routers import agents, chat, csv_data, files, flow, notebooks, plotly_data, report, sessions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,6 +85,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 # Register routers
+app.include_router(agents.router)
 app.include_router(sessions.router)
 app.include_router(chat.router)
 app.include_router(csv_data.router)

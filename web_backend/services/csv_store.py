@@ -81,6 +81,26 @@ class CsvStore:
 
     # ── read ───────────────────────────────────────────────
 
+    def _try_restore(self, file_id: str) -> "pd.DataFrame | None":
+        """서버 재시작 후 디스크에 파일이 있으면 메모리로 복원한다."""
+        data_dir = Path(settings.DATA_DIR) / file_id
+        if not data_dir.exists():
+            return None
+        csv_files = sorted(data_dir.glob("*.csv"))
+        if not csv_files:
+            return None
+        csv_file = csv_files[0]
+        try:
+            df = _read_csv_with_encoding(csv_file)
+            self._frames[file_id] = df
+            self._filenames[file_id] = csv_file.name
+            self._paths[file_id] = csv_file
+            log.info("CSV restored from disk: %s / %s", file_id, csv_file.name)
+            return df
+        except Exception as exc:
+            log.warning("Failed to restore CSV %s: %s", file_id, exc)
+            return None
+
     def get_page(
         self,
         file_id: str,
@@ -89,6 +109,8 @@ class CsvStore:
     ) -> dict[str, Any]:
         """Return a page of rows as list[dict] plus metadata."""
         df = self._frames.get(file_id)
+        if df is None:
+            df = self._try_restore(file_id)
         if df is None:
             raise KeyError(file_id)
 
@@ -109,6 +131,8 @@ class CsvStore:
     def get_meta(self, file_id: str) -> dict[str, Any]:
         df = self._frames.get(file_id)
         if df is None:
+            df = self._try_restore(file_id)
+        if df is None:
             raise KeyError(file_id)
         return {
             "file_id": file_id,
@@ -119,9 +143,13 @@ class CsvStore:
         }
 
     def get_download_path(self, file_id: str) -> Path | None:
+        if file_id not in self._paths:
+            self._try_restore(file_id)
         return self._paths.get(file_id)
 
     def has(self, file_id: str) -> bool:
+        if file_id not in self._frames:
+            self._try_restore(file_id)
         return file_id in self._frames
 
     # ── cleanup ────────────────────────────────────────────

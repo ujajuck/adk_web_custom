@@ -85,21 +85,58 @@ def _parse_run_response(content_type: str, text: str) -> dict[str, Any]:
     return {"status": "success", "outputs": [], "events": events}
 
 
+def _collect_agent_names(agent_def: Any, names: list[str]) -> None:
+    """Recursively collect agent names from ADK app definition."""
+    if not isinstance(agent_def, dict):
+        return
+    name = agent_def.get("name")
+    if name:
+        names.append(name)
+    for sub in agent_def.get("sub_agents") or []:
+        _collect_agent_names(sub, names)
+
+
+async def list_agents() -> list[str]:
+    """List available agents from ADK app (falls back to root_agent)."""
+    base = settings.ADK_BASE_URL.rstrip("/")
+    app = settings.ADK_APP_NAME
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base}/apps/{app}")
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict):
+                    names: list[str] = []
+                    _collect_agent_names(data.get("agent") or data, names)
+                    if names:
+                        return names
+    except Exception as e:
+        log.debug("Failed to list ADK agents: %s", e)
+    return ["root_agent"]
+
+
 async def send_message_to_adk(
     user_id: str,
     session_id: str,
     message: str,
+    agent_name: str | None = None,
 ) -> dict[str, Any]:
-    """Send message to ADK. Returns {status, outputs, events}."""
+    """Send message to ADK. Returns {status, outputs, events}.
+
+    agent_name: 특정 에이전트를 지정할 때 사용.
+    ADK /run 에 agentName 파라미터로 전달 (ADK 버전에 따라 지원 여부 다름).
+    """
     base = settings.ADK_BASE_URL.rstrip("/")
     app = settings.ADK_APP_NAME
 
-    payload = {
+    payload: dict[str, Any] = {
         "appName": app,
         "userId": user_id,
         "sessionId": session_id,
         "newMessage": {"role": "user", "parts": [{"text": message}]},
     }
+    if agent_name:
+        payload["agentName"] = agent_name
 
     async with httpx.AsyncClient(timeout=_timeout) as client:
         resp = await client.post(f"{base}/run", json=payload)
