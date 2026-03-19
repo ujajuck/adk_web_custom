@@ -36,6 +36,7 @@ class FlowEdge:
     source: str  # source node id
     target: str  # target node id
     tool_name: str
+    agent_name: Optional[str] = None  # functionCall을 발행한 에이전트 (event.author)
     tool_args: dict = field(default_factory=dict)
     label: Optional[str] = None
 
@@ -77,6 +78,8 @@ def _extract_tool_calls(events: list[dict]) -> list[dict]:
     tool_calls = []
 
     for ev in events:
+        # event.author = 이 이벤트를 발행한 에이전트 이름 (e.g. "data_agent")
+        author = ev.get("author") or ""
         content = ev.get("content") or {}
         parts = content.get("parts") or []
 
@@ -88,6 +91,7 @@ def _extract_tool_calls(events: list[dict]) -> list[dict]:
                     "type": "call",
                     "name": func_call.get("name", "unknown"),
                     "args": func_call.get("args", {}),
+                    "agent": author,
                 })
 
             # 툴 호출 응답
@@ -97,6 +101,7 @@ def _extract_tool_calls(events: list[dict]) -> list[dict]:
                     "type": "response",
                     "name": func_resp.get("name", "unknown"),
                     "response": func_resp.get("response", {}),
+                    "agent": author,
                 })
 
     return tool_calls
@@ -219,6 +224,7 @@ def parse_artifact_flow(
             call = pending_calls.pop(0)
 
             tool_name = call.get("name", "unknown")
+            agent_name = call.get("agent") or ""
             tool_args = call.get("args", {})
             response = tc.get("response", {})
 
@@ -267,6 +273,7 @@ def parse_artifact_flow(
                         source=input_id,
                         target=output_id,
                         tool_name=tool_name,
+                        agent_name=agent_name or None,
                         tool_args=tool_args,
                         label=_get_tool_label(tool_name, tool_args),
                     )
@@ -287,6 +294,7 @@ def parse_artifact_flow(
                         source=start_id,
                         target=output_id,
                         tool_name=tool_name,
+                        agent_name=agent_name or None,
                         tool_args=tool_args,
                         label=_get_tool_label(tool_name, tool_args),
                     )

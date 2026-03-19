@@ -22,6 +22,7 @@ interface FlowEdge {
   source: string;
   target: string;
   tool_name: string;
+  agent_name?: string;  // functionCall을 발행한 에이전트 (event.author)
   tool_args?: Record<string, any>;
   label?: string;
 }
@@ -138,14 +139,13 @@ function calculateLayout(
     levelCounts.set(toolLevel, idx + 1);
 
     const toolNodeId = `tool_${edge.id}`;
-    // {아티팩트명:툴명} 형식 — 툴명 없으면 아티팩트명, 둘 다 없으면 edge.label 또는 "tool"
-    const targetNode = nodes.find((n) => n.id === edge.target);
-    const artifactName =
-      targetNode?.artifact_name || targetNode?.label || edge.label || "";
-    const toolName = edge.tool_name || "";
-    const rawLabel = artifactName && toolName
-      ? `${artifactName}:${toolName}`
-      : artifactName || toolName || edge.label || "tool";
+    // {agent_name}:{tool_name} 형식 — data_agent:dataset_get
+    // agent_name 없으면 tool_name만, 둘 다 없으면 edge.label
+    const agentName = edge.agent_name || "";
+    const toolFunc = edge.tool_name || "";
+    const rawLabel = agentName && toolFunc
+      ? `${agentName}:${toolFunc}`
+      : toolFunc || agentName || edge.label || "tool";
 
     layoutNodes.push({
       id: toolNodeId,
@@ -495,8 +495,11 @@ export default function FlowGraphWidget({
           <div className="font-medium mb-1">{hoveredNode.label}</div>
           {hoveredNode.isTool ? (
             <>
+              {hoveredNode.originalEdge?.agent_name && (
+                <div className="text-xs text-purple-400">Agent: {hoveredNode.originalEdge.agent_name}</div>
+              )}
               {hoveredNode.originalEdge?.tool_name && (
-                <div className="text-xs text-slate-400">Tool: {hoveredNode.originalEdge.tool_name}</div>
+                <div className="text-xs text-slate-400">Fn: {hoveredNode.originalEdge.tool_name}</div>
               )}
               {(() => {
                 const targetArtifact = filteredData?.nodes.find(
