@@ -71,38 +71,52 @@ class ArtifactFlow:
 def _extract_tool_calls(events: list[dict]) -> list[dict]:
     """ADK 이벤트에서 툴 호출 정보 추출.
 
-    ADK 이벤트 구조:
-    - content.parts[].functionCall: 툴 호출 요청
-    - content.parts[].functionResponse: 툴 호출 응답
+    ADK 버전에 따라 세 가지 위치에 functionCall이 있을 수 있음:
+    1. 이벤트 루트:  event.functionCall  (예: {"author":"data_agent","functionCall":{...}})
+    2. content 직접: event.content.functionCall
+    3. content.parts 배열: event.content.parts[].functionCall  (Gemini 표준)
     """
     tool_calls = []
 
+    def _append_call(fc: dict, author: str) -> None:
+        tool_calls.append({
+            "type": "call",
+            "name": fc.get("name", "unknown"),
+            "args": fc.get("args") or fc.get("arguments") or {},
+            "agent": author,
+        })
+
+    def _append_resp(fr: dict, author: str) -> None:
+        tool_calls.append({
+            "type": "response",
+            "name": fr.get("name", "unknown"),
+            "response": fr.get("response") or {},
+            "agent": author,
+        })
+
     for ev in events:
-        # event.author = 이 이벤트를 발행한 에이전트 이름 (e.g. "data_agent")
         author = ev.get("author") or ""
+
+        # ① 이벤트 루트 레벨
+        if fc := ev.get("functionCall"):
+            _append_call(fc, author)
+        if fr := ev.get("functionResponse"):
+            _append_resp(fr, author)
+
         content = ev.get("content") or {}
-        parts = content.get("parts") or []
 
-        for part in parts:
-            # 툴 호출 요청
-            func_call = part.get("functionCall")
-            if func_call:
-                tool_calls.append({
-                    "type": "call",
-                    "name": func_call.get("name", "unknown"),
-                    "args": func_call.get("args", {}),
-                    "agent": author,
-                })
+        # ② content 직접
+        if fc := content.get("functionCall"):
+            _append_call(fc, author)
+        if fr := content.get("functionResponse"):
+            _append_resp(fr, author)
 
-            # 툴 호출 응답
-            func_resp = part.get("functionResponse")
-            if func_resp:
-                tool_calls.append({
-                    "type": "response",
-                    "name": func_resp.get("name", "unknown"),
-                    "response": func_resp.get("response", {}),
-                    "agent": author,
-                })
+        # ③ content.parts 배열 (Gemini 표준)
+        for part in content.get("parts") or []:
+            if fc := part.get("functionCall"):
+                _append_call(fc, author)
+            if fr := part.get("functionResponse"):
+                _append_resp(fr, author)
 
     return tool_calls
 
@@ -231,74 +245,97 @@ def parse_artifact_flow(
             # 입력 아티팩트 추출
             input_artifact = _extract_artifact_locator(tool_args)
 
-            # 출력 아티팩트 추출
+            # 출력 아티팩트 추출 — response에서 못 찾으면 artifact_delta에서 힌트
             output_artifact = _extract_output_artifact(response)
+            if not output_artifact and artifact_delta:
+                # 이번 응답에서 생성된 아티팩트 중 아직 노드가 없는 것 사용
+                for fname, ver in artifact_delta.items():
+                    nid = f"node_{fname}"
+                    if not any(n.id == nid for n in flow.nodes):
+                        output_artifact = {"artifact_name": fname, "file_name": fname}
+                        break
 
-            # 노드 및 엣지 생성
-            if input_artifact or output_artifact:
-                edge_id = f"edge_{len(flow.edges)}_{tool_name}"
+            edge_id = f"edge_{len(flow.edges)}_{tool_name}"
 
-                # 입력 노드
-                if input_artifact:
-                    input_id = f"node_{input_artifact.get('artifact_name', 'input')}"
-                    input_node = FlowNode(
-                        id=input_id,
-                        label=input_artifact.get("file_name", "입력 데이터"),
-                        node_type="input",
-                        artifact_name=input_artifact.get("artifact_name"),
-                        file_name=input_artifact.get("file_name"),
-                    )
-                    flow.add_node(input_node)
-                else:
-                    input_id = None
+            # ── 입력 노드 ──
+            if input_artifact:
+                input_id = f"node_{input_artifact.get('artifact_name', 'input')}"
+                flow.add_node(FlowNode(
+                    id=input_id,
+                    label=input_artifact.get("file_name", "입력 데이터"),
+                    node_type="input",
+                    artifact_name=input_artifact.get("artifact_name"),
+                    file_name=input_artifact.get("file_name"),
+                ))
+            else:
+                input_id = "node_start"
+                flow.add_node(FlowNode(id=input_id, label="시작", node_type="input"))
 
-                # 출력 노드
-                if output_artifact:
-                    output_id = f"node_{output_artifact.get('artifact_name', 'output')}"
-                    output_node = FlowNode(
-                        id=output_id,
-                        label=output_artifact.get("file_name", "출력 결과"),
-                        node_type="output",
-                        artifact_name=output_artifact.get("artifact_name"),
-                        file_name=output_artifact.get("file_name"),
-                    )
-                    flow.add_node(output_node)
-                else:
-                    output_id = None
+            # ── 출력 노드 ──
+            if output_artifact:
+                output_id = f"node_{output_artifact.get('artifact_name', 'output')}"
+                flow.add_node(FlowNode(
+                    id=output_id,
+                    label=output_artifact.get("file_name", "출력 결과"),
+                    node_type="output",
+                    artifact_name=output_artifact.get("artifact_name"),
+                    file_name=output_artifact.get("file_name"),
+                ))
+            else:
+                # 아티팩트 없는 툴도 반드시 노드 생성
+                output_id = f"node_{tool_name}_result_{len(flow.edges)}"
+                flow.add_node(FlowNode(
+                    id=output_id,
+                    label=tool_name,
+                    node_type="output",
+                    artifact_name=None,
+                ))
 
-                # 엣지 생성 (입력 → 출력)
-                if input_id and output_id:
-                    edge = FlowEdge(
-                        id=edge_id,
-                        source=input_id,
-                        target=output_id,
-                        tool_name=tool_name,
-                        agent_name=agent_name or None,
-                        tool_args=tool_args,
-                        label=_get_tool_label(tool_name, tool_args),
-                    )
-                    flow.add_edge(edge)
-                elif output_id:
-                    # 입력 없이 출력만 있는 경우 (데이터 로드 등)
-                    # 가상의 시작 노드 생성
-                    start_id = "node_start"
-                    start_node = FlowNode(
-                        id=start_id,
-                        label="시작",
-                        node_type="input",
-                    )
-                    flow.add_node(start_node)
+            flow.add_edge(FlowEdge(
+                id=edge_id,
+                source=input_id,
+                target=output_id,
+                tool_name=tool_name,
+                agent_name=agent_name or None,
+                tool_args=tool_args,
+                label=_get_tool_label(tool_name, tool_args),
+            ))
 
-                    edge = FlowEdge(
-                        id=edge_id,
-                        source=start_id,
-                        target=output_id,
-                        tool_name=tool_name,
-                        agent_name=agent_name or None,
-                        tool_args=tool_args,
-                        label=_get_tool_label(tool_name, tool_args),
-                    )
-                    flow.add_edge(edge)
+    # response 없이 남은 unmatched call도 노드/엣지 생성
+    for call in pending_calls:
+        tool_name = call.get("name", "unknown")
+        agent_name = call.get("agent") or ""
+        edge_id = f"edge_{len(flow.edges)}_{tool_name}_unmatched"
+
+        input_id = "node_start"
+        flow.add_node(FlowNode(id=input_id, label="시작", node_type="input"))
+
+        # artifact_delta에 새 아티팩트 있으면 출력으로 연결
+        output_id = None
+        for fname in artifact_delta:
+            nid = f"node_{fname}"
+            if not any(n.id == nid for n in flow.nodes):
+                flow.add_node(FlowNode(
+                    id=nid, label=fname, node_type="output",
+                    artifact_name=fname, file_name=fname,
+                ))
+                output_id = nid
+                break
+
+        if not output_id:
+            output_id = f"node_{tool_name}_out_{len(flow.edges)}"
+            flow.add_node(FlowNode(
+                id=output_id, label=tool_name, node_type="output", artifact_name=None,
+            ))
+
+        flow.add_edge(FlowEdge(
+            id=edge_id,
+            source=input_id,
+            target=output_id,
+            tool_name=tool_name,
+            agent_name=agent_name or None,
+            label=tool_name,
+        ))
 
     # artifact_delta에서 추가 노드 생성
     for filename, version in artifact_delta.items():

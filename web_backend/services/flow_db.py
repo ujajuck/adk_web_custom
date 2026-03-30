@@ -103,7 +103,7 @@ def build_flow_data(session_id: str, rows: list) -> dict[str, Any]:
             }
 
         src_id = f"node_{in_art}" if in_art else "node_start"
-        tgt_id = f"node_{out_art}" if out_art else None
+        tgt_id = f"node_{out_art}" if out_art else f"node_{row['edge_id']}_result"
 
         if src_id == "node_start" and "node_start" not in nodes_map:
             nodes_map["node_start"] = {
@@ -113,15 +113,23 @@ def build_flow_data(session_id: str, rows: list) -> dict[str, Any]:
                 "artifact_name": None,
             }
 
-        if tgt_id:
-            edges.append({
-                "id": row["edge_id"],
-                "source": src_id,
-                "target": tgt_id,
-                "tool_name": row["tool_name"],
-                "agent_name": row["agent_name"] or "",
-                "label": row["tool_name"],
-            })
+        if tgt_id not in nodes_map and not out_art:
+            # 아티팩트 없는 툴의 가상 출력 노드
+            nodes_map[tgt_id] = {
+                "id": tgt_id,
+                "label": row["tool_name"] or "결과",
+                "node_type": "output",
+                "artifact_name": None,
+            }
+
+        edges.append({
+            "id": row["edge_id"],
+            "source": src_id,
+            "target": tgt_id,
+            "tool_name": row["tool_name"],
+            "agent_name": row["agent_name"] or "",
+            "label": row["tool_name"],
+        })
 
     return {
         "session_id": session_id,
