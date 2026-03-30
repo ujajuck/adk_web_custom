@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..database import get_db
+from ..services.flow_db import get_flow_data
 
 router = APIRouter(prefix="/api/notebooks", tags=["notebooks"])
 
@@ -50,7 +51,17 @@ async def create_notebook(req: NotebookCreate):
     notebook_id = f"nb_{uuid.uuid4().hex[:12]}"
     now = datetime.utcnow().isoformat()
     messages_json = json.dumps(req.messages, ensure_ascii=False)
-    metadata_json = json.dumps(req.metadata or {}, ensure_ascii=False)
+
+    # 현재 세션의 플로우 스냅샷을 메타데이터에 포함
+    metadata = dict(req.metadata or {})
+    try:
+        flow_data = await get_flow_data(req.session_id)
+        if flow_data.get("edges"):
+            metadata["flow"] = flow_data
+    except Exception:
+        pass  # 플로우 없으면 무시
+
+    metadata_json = json.dumps(metadata, ensure_ascii=False)
 
     db = await get_db()
     try:
@@ -71,7 +82,7 @@ async def create_notebook(req: NotebookCreate):
         session_id=req.session_id,
         title=req.title,
         messages=req.messages,
-        metadata=req.metadata,
+        metadata=metadata,
         is_shared=False,
         created_at=now,
         updated_at=now,

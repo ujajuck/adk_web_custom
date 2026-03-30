@@ -584,7 +584,7 @@ export default function ChatPanel() {
           session_id: string;
           title: string;
           messages: Array<{ role: string; text: string }>;
-          metadata?: { widgets?: WidgetMeta[] };
+          metadata?: { widgets?: WidgetMeta[]; flow?: any };
         };
       }>;
       const nb = ce.detail?.notebook;
@@ -602,12 +602,18 @@ export default function ChatPanel() {
           }
         }
         setWidgetsMeta(savedWidgets);
+
+        // 저장된 플로우 복원
+        const savedFlow = nb.metadata?.flow;
+        if (savedFlow?.edges?.length) {
+          addFlowGraphWindow(`${nb.title} Flow`, nb.session_id, savedFlow);
+        }
       }
     };
 
     window.addEventListener("notebook:select", handler);
     return () => window.removeEventListener("notebook:select", handler);
-  }, [clearAllWindows, addCsvFileWindow, addPlotlyWindow]);
+  }, [clearAllWindows, addCsvFileWindow, addPlotlyWindow, addFlowGraphWindow]);
 
   // Listen for notebook:add events (from FlowWidget save)
   useEffect(() => {

@@ -150,6 +150,7 @@ export default function WorkspacePanel() {
         return (
           <FlowGraphWidget
             sessionId={w.sessionId}
+            staticFlow={w.staticFlow}
             checkedWidgets={checkedWidgets}
             allWindows={windows}
           />
