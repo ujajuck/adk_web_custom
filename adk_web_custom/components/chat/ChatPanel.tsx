@@ -218,6 +218,8 @@ export default function ChatPanel() {
 
   const [isSending, setIsSending] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveNameInput, setSaveNameInput] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const creatingRef = useRef(false);
@@ -498,12 +500,11 @@ export default function ChatPanel() {
     void sendTextToAdk(payload);
   }
 
-  const saveNotebook = useCallback(async () => {
+  const doSaveNotebook = useCallback(async (title: string) => {
     if (!userId || !sessionId || messages.length === 0) return;
-
     setIsSaving(true);
+    setSaveDialogOpen(false);
     try {
-      const title = `대화 ${new Date().toLocaleString("ko-KR")}`;
       const res = await fetch(`${API_URL}/api/notebooks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -515,15 +516,9 @@ export default function ChatPanel() {
           metadata: { widgets: widgetsMeta },
         }),
       });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const notebook = await res.json();
       pushMsg("assistant", `노트북 저장됨: ${notebook.title}`);
-
-      // Emit event to refresh notebook list
       window.dispatchEvent(new CustomEvent("notebook:refresh", { detail: { userId } }));
     } catch (e: any) {
       console.error("[ChatPanel] Save error:", e);
@@ -532,6 +527,13 @@ export default function ChatPanel() {
       setIsSaving(false);
     }
   }, [userId, sessionId, messages, widgetsMeta]);
+
+  const saveNotebook = useCallback(() => {
+    if (!userId || !sessionId || messages.length === 0) return;
+    const defaultName = `대화 ${new Date().toLocaleString("ko-KR")}`;
+    setSaveNameInput(defaultName);
+    setSaveDialogOpen(true);
+  }, [userId, sessionId, messages]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -780,7 +782,41 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="relative h-full flex flex-col bg-white">
+      {/* ── 노트북 저장 이름 다이얼로그 ── */}
+      {saveDialogOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-80 p-5 flex flex-col gap-4">
+            <h3 className="font-semibold text-gray-800 text-sm">노트북 이름 입력</h3>
+            <input
+              autoFocus
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
+              value={saveNameInput}
+              onChange={(e) => setSaveNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && saveNameInput.trim()) void doSaveNotebook(saveNameInput.trim());
+                if (e.key === "Escape") setSaveDialogOpen(false);
+              }}
+              placeholder="노트북 이름"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-3 py-1.5 text-xs rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                onClick={() => setSaveDialogOpen(false)}
+              >
+                취소
+              </button>
+              <button
+                className="px-3 py-1.5 text-xs rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50"
+                disabled={!saveNameInput.trim()}
+                onClick={() => void doSaveNotebook(saveNameInput.trim())}
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── 상단: 세션 상태 ── */}
       <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-2 min-h-[44px]">
         {sessionStatus === "ready" && (
