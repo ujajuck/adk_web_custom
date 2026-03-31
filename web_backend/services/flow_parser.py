@@ -337,19 +337,6 @@ def parse_artifact_flow(
             label=tool_name,
         ))
 
-    # artifact_delta에서 추가 노드 생성
-    for filename, version in artifact_delta.items():
-        node_id = f"node_artifact_{filename}_v{version}"
-        if not any(n.id == node_id for n in flow.nodes):
-            node = FlowNode(
-                id=node_id,
-                label=f"{filename} (v{version})",
-                node_type="output",
-                artifact_name=filename,
-                file_name=filename,
-            )
-            flow.add_node(node)
-
     return flow
 
 

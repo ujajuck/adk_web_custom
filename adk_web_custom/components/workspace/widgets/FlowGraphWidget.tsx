@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const API_URL =
@@ -50,12 +50,12 @@ interface DrawEdge {
   to: DrawNode;
 }
 
-const ART_R = 26;   // artifact 원 반지름
-const TOOL_W = 130; // tool 사각형 너비
-const TOOL_H = 38;  // tool 사각형 높이
-const COL_GAP = 80; // 컬럼 사이 간격
-const ROW_GAP = 36; // 같은 컬럼 내 행 간격
-const PAD_X = 50;
+const ART_R = 32;   // artifact 원 반지름 (slightly larger for readability)
+const TOOL_W = 140; // tool 사각형 너비
+const TOOL_H = 44;  // tool 사각형 높이
+const COL_GAP = 90; // 컬럼 사이 간격
+const ROW_GAP = 40; // 같은 컬럼 내 행 간격
+const PAD_X = 60;
 const PAD_Y = 60;
 
 function buildLayout(data: FlowData): { nodes: DrawNode[]; edges: DrawEdge[] } {
@@ -90,13 +90,11 @@ function buildLayout(data: FlowData): { nodes: DrawNode[]; edges: DrawEdge[] } {
     if (!artLevel.has(n.id)) artLevel.set(n.id, 0);
   }
 
-  // artifact node의 x 좌표: 레벨 * (2컬럼 폭) → artifact | tool | artifact | tool ...
   const artColW = ART_R * 2;
   const toolColW = TOOL_W;
-  const colW = artColW + COL_GAP + toolColW + COL_GAP; // 한 단계 너비
+  const colW = artColW + COL_GAP + toolColW + COL_GAP;
 
-  // artifact 위치: 같은 레벨이면 행으로 분리
-  const levelRows = new Map<number, number>(); // level → 현재 행 수
+  const levelRows = new Map<number, number>();
   const drawNodes: DrawNode[] = [];
   const artNodeMap = new Map<string, DrawNode>();
 
@@ -122,8 +120,7 @@ function buildLayout(data: FlowData): { nodes: DrawNode[]; edges: DrawEdge[] } {
     artNodeMap.set(n.id, dn);
   }
 
-  // tool node: 소스 artifact 오른쪽 COL_GAP에 배치
-  const toolRowCount = new Map<number, number>(); // 같은 level의 tool 개수
+  const toolRowCount = new Map<number, number>();
   const toolNodeMap = new Map<string, DrawNode>();
 
   for (const e of data.edges) {
@@ -134,9 +131,7 @@ function buildLayout(data: FlowData): { nodes: DrawNode[]; edges: DrawEdge[] } {
     const tIdx = toolRowCount.get(level) ?? 0;
     toolRowCount.set(level, tIdx + 1);
 
-    // tool x: artifact 오른쪽
     const tx = src.x + ART_R + COL_GAP;
-    // tool y: 소스와 타깃의 중간 (타깃 없으면 소스와 같은 높이)
     const tgt = artNodeMap.get(e.target);
     const ty = tgt
       ? (src.y + tgt.y) / 2 - TOOL_H / 2
@@ -162,7 +157,6 @@ function buildLayout(data: FlowData): { nodes: DrawNode[]; edges: DrawEdge[] } {
     toolNodeMap.set(e.id, dn);
   }
 
-  // 엣지: artifact→tool, tool→artifact
   const drawEdges: DrawEdge[] = [];
   for (const e of data.edges) {
     const src = artNodeMap.get(e.source);
@@ -175,6 +169,23 @@ function buildLayout(data: FlowData): { nodes: DrawNode[]; edges: DrawEdge[] } {
   return { nodes: drawNodes, edges: drawEdges };
 }
 
+/** Compute bounding box of all draw nodes */
+function getBounds(nodes: DrawNode[]): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (!nodes.length) return { minX: 0, minY: 0, maxX: 400, maxY: 300 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    const left = n.kind === "artifact" ? n.x - ART_R : n.x;
+    const right = n.kind === "artifact" ? n.x + ART_R : n.x + n.w;
+    const top = n.kind === "artifact" ? n.y - ART_R : n.y;
+    const bottom = n.kind === "artifact" ? n.y + ART_R : n.y + n.h;
+    if (left < minX) minX = left;
+    if (right > maxX) maxX = right;
+    if (top < minY) minY = top;
+    if (bottom > maxY) maxY = bottom;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
 // ── 컴포넌트 ──────────────────────────────────────────────────────
 interface WindowInfo {
   id: string;
@@ -184,9 +195,15 @@ interface WindowInfo {
 
 interface FlowGraphWidgetProps {
   sessionId: string;
-  staticFlow?: FlowData; // 노트북에서 로드된 정적 스냅샷
+  staticFlow?: FlowData;
   checkedWidgets?: string[];
   allWindows?: WindowInfo[];
+}
+
+interface Transform {
+  tx: number;
+  ty: number;
+  scale: number;
 }
 
 export default function FlowGraphWidget({
@@ -206,9 +223,17 @@ export default function FlowGraphWidget({
     edges: [],
   });
 
-  // staticFlow가 있으면 API 폴링 없이 바로 사용
+  // Transform state: tx/ty are canvas-space offsets, scale is zoom level
+  const [transform, setTransform] = useState<Transform>({ tx: 0, ty: 0, scale: 1 });
+  const transformRef = useRef<Transform>(transform);
+  transformRef.current = transform;
+
+  // Pan state
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
+
   const fetchFlow = useCallback(async () => {
-    if (staticFlow) return; // 정적 모드에서는 API 호출 불요
+    if (staticFlow) return;
     try {
       const res = await fetch(`${API_URL}/api/flow/${sessionId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -273,8 +298,37 @@ export default function FlowGraphWidget({
   // 레이아웃 계산
   useEffect(() => {
     if (!filteredData) return;
-    setLayout(buildLayout(filteredData));
-  }, [filteredData]);
+    const newLayout = buildLayout(filteredData);
+    setLayout(newLayout);
+    // Auto-fit on new layout
+    autoFit(newLayout.nodes);
+  }, [filteredData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const autoFit = useCallback((nodes: DrawNode[]) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (!nodes.length) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const vw = canvas.getBoundingClientRect().width;
+    const vh = canvas.getBoundingClientRect().height - 36; // header offset
+
+    const bounds = getBounds(nodes);
+    const contentW = bounds.maxX - bounds.minX + PAD_X * 2;
+    const contentH = bounds.maxY - bounds.minY + PAD_Y * 2;
+
+    const scaleX = vw / contentW;
+    const scaleY = vh / contentH;
+    const scale = Math.min(scaleX, scaleY, 2); // cap at 2x
+
+    // Center content
+    const scaledW = contentW * scale;
+    const scaledH = contentH * scale;
+    const tx = (vw - scaledW) / 2 - (bounds.minX - PAD_X) * scale;
+    const ty = (vh - scaledH) / 2 - (bounds.minY - PAD_Y) * scale + 36;
+
+    setTransform({ tx, ty, scale });
+  }, []);
 
   // ── 캔버스 렌더링 ────────────────────────────────────────────────
   useEffect(() => {
@@ -289,11 +343,17 @@ export default function FlowGraphWidget({
     canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
 
+    const { tx, ty, scale } = transform;
+
     // 배경
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, rect.width, rect.height);
 
-    // roundRect 폴백
+    // Apply transform
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.scale(scale, scale);
+
     const roundRect = (x: number, y: number, w: number, h: number, r: number) => {
       if (typeof ctx.roundRect === "function") {
         ctx.roundRect(x, y, w, h, r);
@@ -314,7 +374,6 @@ export default function FlowGraphWidget({
     // 엣지 그리기
     for (const edge of layout.edges) {
       const { from, to } = edge;
-      // from → to 연결점 계산
       const sx = from.kind === "artifact" ? from.x + ART_R : from.x + from.w;
       const sy = from.kind === "artifact" ? from.y : from.y + from.h / 2;
       const ex = to.kind === "artifact" ? to.x - ART_R : to.x;
@@ -330,7 +389,7 @@ export default function FlowGraphWidget({
 
       // 화살표
       const angle = Math.atan2(ey - sy, ex - cpX);
-      const ar = 6;
+      const ar = 7;
       ctx.beginPath();
       ctx.fillStyle = "#475569";
       ctx.moveTo(ex, ey);
@@ -346,74 +405,87 @@ export default function FlowGraphWidget({
 
       ctx.save();
       if (dn.kind === "artifact") {
-        // 원형 (artifact)
         ctx.beginPath();
         ctx.arc(dn.x, dn.y, ART_R, 0, Math.PI * 2);
         ctx.fillStyle = hovered ? "#166534" : "#14532d";
         ctx.fill();
         ctx.strokeStyle = hovered ? "#4ade80" : "#22c55e";
-        ctx.lineWidth = hovered ? 2 : 1.5;
+        ctx.lineWidth = hovered ? 2.5 : 1.5;
         ctx.stroke();
 
-        // 라벨 (원 안)
-        ctx.font = "bold 9px system-ui";
+        ctx.font = "bold 10px system-ui";
         ctx.fillStyle = "#bbf7d0";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        const maxW = ART_R * 2 - 6;
-        // 두 줄 분할
+        const maxW = ART_R * 2 - 8;
         const words = dn.label.split(/[._\-]/);
         if (words.length > 1 && ctx.measureText(dn.label).width > maxW) {
           const mid = Math.ceil(words.length / 2);
-          ctx.fillText(words.slice(0, mid).join("."), dn.x, dn.y - 6, maxW);
-          ctx.fillText(words.slice(mid).join("."), dn.x, dn.y + 6, maxW);
+          ctx.fillText(words.slice(0, mid).join("."), dn.x, dn.y - 7, maxW);
+          ctx.fillText(words.slice(mid).join("."), dn.x, dn.y + 7, maxW);
         } else {
           ctx.fillText(dn.label, dn.x, dn.y, maxW);
         }
       } else {
-        // 사각형 (tool)
         ctx.beginPath();
-        roundRect(dn.x, dn.y, dn.w, dn.h, 6);
+        roundRect(dn.x, dn.y, dn.w, dn.h, 7);
         ctx.fillStyle = hovered ? "#312e81" : "#1e1b4b";
         ctx.fill();
         ctx.strokeStyle = hovered ? "#818cf8" : "#4338ca";
-        ctx.lineWidth = hovered ? 2 : 1.5;
+        ctx.lineWidth = hovered ? 2.5 : 1.5;
         ctx.stroke();
 
-        // 라벨 분리: agent / tool
         const raw = dn.label;
         const colonIdx = raw.indexOf(":");
         if (colonIdx > -1) {
           const agent = raw.slice(0, colonIdx);
           const tool = raw.slice(colonIdx + 1);
-          ctx.font = "bold 8px system-ui";
+          ctx.font = "bold 9px system-ui";
           ctx.fillStyle = "#a5b4fc";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(agent, dn.x + dn.w / 2, dn.y + dn.h / 2 - 7, dn.w - 8);
-          ctx.font = "9px system-ui";
+          ctx.fillText(agent, dn.x + dn.w / 2, dn.y + dn.h / 2 - 8, dn.w - 10);
+          ctx.font = "10px system-ui";
           ctx.fillStyle = "#e0e7ff";
-          ctx.fillText(tool, dn.x + dn.w / 2, dn.y + dn.h / 2 + 7, dn.w - 8);
+          ctx.fillText(tool, dn.x + dn.w / 2, dn.y + dn.h / 2 + 8, dn.w - 10);
         } else {
-          ctx.font = "bold 9px system-ui";
+          ctx.font = "bold 10px system-ui";
           ctx.fillStyle = "#e0e7ff";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(raw, dn.x + dn.w / 2, dn.y + dn.h / 2, dn.w - 8);
+          ctx.fillText(raw, dn.x + dn.w / 2, dn.y + dn.h / 2, dn.w - 10);
         }
       }
       ctx.restore();
     }
-  }, [filteredData, layout, hoveredNode]);
 
-  // 마우스 인터랙션
+    ctx.restore(); // restore transform
+  }, [filteredData, layout, hoveredNode, transform]);
+
+  // Convert screen coords to world coords
+  const screenToWorld = useCallback((sx: number, sy: number) => {
+    const { tx, ty, scale } = transformRef.current;
+    return { x: (sx - tx) / scale, y: (sy - ty) / scale };
+  }, []);
+
+  // 마우스 인터랙션 - hover
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+
+      // Handle pan
+      if (isPanning.current) {
+        const dx = screenX - panStart.current.x;
+        const dy = screenY - panStart.current.y;
+        setTransform(t => ({ ...t, tx: panStart.current.tx + dx, ty: panStart.current.ty + dy }));
+        return;
+      }
+
+      const { x: mx, y: my } = screenToWorld(screenX, screenY);
 
       const hit = layout.nodes.find((dn) => {
         if (dn.kind === "artifact") {
@@ -426,8 +498,52 @@ export default function FlowGraphWidget({
       });
       setHoveredNode(hit ?? null);
     },
-    [layout],
+    [layout, screenToWorld],
   );
+
+  // Pan start
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 0) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      isPanning.current = true;
+      panStart.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        tx: transformRef.current.tx,
+        ty: transformRef.current.ty,
+      };
+    }
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isPanning.current = false;
+  }, []);
+
+  // Wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const delta = e.deltaY > 0 ? 0.85 : 1.18;
+    setTransform(t => {
+      const newScale = Math.max(0.1, Math.min(5, t.scale * delta));
+      // Zoom towards mouse position
+      const newTx = mouseX - (mouseX - t.tx) * (newScale / t.scale);
+      const newTy = mouseY - (mouseY - t.ty) * (newScale / t.scale);
+      return { tx: newTx, ty: newTy, scale: newScale };
+    });
+  }, []);
+
+  // Fit button
+  const handleFit = useCallback(() => {
+    autoFit(layout.nodes);
+  }, [layout.nodes, autoFit]);
 
   // ── 렌더 ──────────────────────────────────────────────────────
   if (loading) {
@@ -456,10 +572,20 @@ export default function FlowGraphWidget({
     );
   }
 
+  // Tooltip position in screen space
+  const tooltipScreenX = hoveredNode
+    ? (() => {
+        const { tx, ty, scale } = transform;
+        const worldX = hoveredNode.kind === "artifact" ? hoveredNode.x + ART_R : hoveredNode.x + hoveredNode.w;
+        const worldY = hoveredNode.kind === "artifact" ? hoveredNode.y : hoveredNode.y + hoveredNode.h / 2;
+        return { x: worldX * scale + tx + 8, y: worldY * scale + ty - 20 };
+      })()
+    : null;
+
   return (
-    <div ref={containerRef} className="relative h-full w-full bg-slate-900">
+    <div ref={containerRef} className="relative h-full w-full bg-slate-900 overflow-hidden">
       {/* 툴바 */}
-      <div className="absolute left-2 top-2 z-10 flex items-center gap-2">
+      <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
         {!staticFlow && (
           <Button
             variant="secondary"
@@ -471,26 +597,59 @@ export default function FlowGraphWidget({
             <RefreshCw size={12} />
           </Button>
         )}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleFit}
+          className="h-7 w-7 bg-slate-800 p-0 text-slate-300 hover:bg-slate-700"
+          title="화면에 맞추기"
+        >
+          <Maximize2 size={12} />
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setTransform(t => ({ ...t, scale: Math.min(5, t.scale * 1.25) }))}
+          className="h-7 w-7 bg-slate-800 p-0 text-slate-300 hover:bg-slate-700"
+          title="확대"
+        >
+          <ZoomIn size={12} />
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.1, t.scale * 0.8) }))}
+          className="h-7 w-7 bg-slate-800 p-0 text-slate-300 hover:bg-slate-700"
+          title="축소"
+        >
+          <ZoomOut size={12} />
+        </Button>
         {staticFlow && (
-          <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
+          <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-1">
             스냅샷
           </span>
         )}
+        <span className="text-[10px] text-slate-600 ml-1">
+          {Math.round(transform.scale * 100)}%
+        </span>
       </div>
 
       <canvas
         ref={canvasRef}
         className="h-full w-full"
-        style={{ paddingTop: 36 }}
+        style={{ cursor: isPanning.current ? "grabbing" : "grab" }}
         onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoveredNode(null)}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => { setHoveredNode(null); isPanning.current = false; }}
+        onWheel={handleWheel}
       />
 
       {/* 툴팁 */}
-      {hoveredNode && (
+      {hoveredNode && tooltipScreenX && (
         <div
           className="pointer-events-none absolute z-20 rounded bg-slate-800 border border-slate-600 px-3 py-2 text-xs text-white shadow-lg max-w-[200px]"
-          style={{ left: hoveredNode.x + (hoveredNode.kind === "tool" ? hoveredNode.w : ART_R) + 10, top: hoveredNode.y }}
+          style={{ left: tooltipScreenX.x, top: tooltipScreenX.y }}
         >
           {hoveredNode.kind === "tool" ? (
             <>
