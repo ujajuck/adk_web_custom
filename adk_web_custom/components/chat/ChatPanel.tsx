@@ -578,7 +578,7 @@ export default function ChatPanel() {
 
   // Listen for notebook selection (load history)
   useEffect(() => {
-    const handler = (e: Event) => {
+    const handler = async (e: Event) => {
       const ce = e as CustomEvent<{
         notebook: {
           notebook_id: string;
@@ -590,25 +590,46 @@ export default function ChatPanel() {
         };
       }>;
       const nb = ce.detail?.notebook;
-      if (nb?.messages) {
-        setMessages(nb.messages as Msg[]);
+      if (!nb?.messages) return;
 
-        // 저장된 위젯 복원 (채팅 메시지 표시 없이)
-        const savedWidgets = nb.metadata?.widgets ?? [];
-        clearAllWindows();
-        for (const w of savedWidgets) {
-          if (w.type === "csvFile") {
-            addCsvFileWindow(w.title, w.fileId);
-          } else if (w.type === "plotly") {
-            addPlotlyWindow(w.title, w.fig);
-          }
+      setMessages(nb.messages as Msg[]);
+
+      // 저장된 위젯 복원 (채팅 메시지 표시 없이)
+      const savedWidgets = nb.metadata?.widgets ?? [];
+      clearAllWindows();
+      for (const w of savedWidgets) {
+        if (w.type === "csvFile") {
+          addCsvFileWindow(w.title, w.fileId);
+        } else if (w.type === "plotly") {
+          addPlotlyWindow(w.title, w.fig);
         }
-        setWidgetsMeta(savedWidgets);
+      }
+      setWidgetsMeta(savedWidgets);
 
-        // 저장된 플로우 복원
-        const savedFlow = nb.metadata?.flow;
-        if (savedFlow?.edges?.length) {
-          addFlowGraphWindow(`${nb.title} Flow`, nb.session_id, savedFlow);
+      // 저장된 플로우 복원
+      const savedFlow = nb.metadata?.flow;
+      if (savedFlow?.edges?.length) {
+        addFlowGraphWindow(`${nb.title} Flow`, nb.session_id, savedFlow);
+      }
+
+      // 노트북 세션이 살아있는지 확인 → 살아있으면 해당 세션으로 전환
+      if (nb.session_id && nb.user_id) {
+        try {
+          const res = await fetch(`${API_URL}/api/sessions?user_id=${encodeURIComponent(nb.user_id)}`);
+          if (res.ok) {
+            const sessions: Array<{ session_id: string; expired: boolean }> = await res.json();
+            const alive = sessions.find((s) => s.session_id === nb.session_id && !s.expired);
+            if (alive) {
+              setUserId(nb.user_id);
+              setSessionId(nb.session_id);
+              setSessionStatus("ready");
+              pushMsg("assistant", `세션 복원됨 · ${nb.session_id}`);
+            } else {
+              pushMsg("assistant", "이전 세션이 만료되었습니다. 새 메시지를 보내면 현재 세션으로 전송됩니다.");
+            }
+          }
+        } catch {
+          // 세션 확인 실패 시 조용히 무시
         }
       }
     };

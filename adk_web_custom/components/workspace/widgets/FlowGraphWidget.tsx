@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { RefreshCw, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getArtifactLabel } from "@/lib/artifactLabels";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
@@ -218,6 +219,7 @@ export default function FlowGraphWidget({
   const [loading, setLoading] = useState(!staticFlow);
   const [error, setError] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<DrawNode | null>(null);
+  const [clickedNode, setClickedNode] = useState<DrawNode | null>(null);
   const [layout, setLayout] = useState<{ nodes: DrawNode[]; edges: DrawEdge[] }>({
     nodes: [],
     edges: [],
@@ -230,6 +232,7 @@ export default function FlowGraphWidget({
 
   // Pan state
   const isPanning = useRef(false);
+  const panMoved = useRef(false);
   const panStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
 
   const fetchFlow = useCallback(async () => {
@@ -336,6 +339,7 @@ export default function FlowGraphWidget({
     if (!canvas || !filteredData) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const isSelected = (dn: DrawNode) => clickedNode?.id === dn.id;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -402,29 +406,38 @@ export default function FlowGraphWidget({
     // 노드 그리기
     for (const dn of layout.nodes) {
       const hovered = hoveredNode?.id === dn.id;
+      const selected = isSelected(dn);
 
       ctx.save();
       if (dn.kind === "artifact") {
+        // selected glow ring
+        if (selected) {
+          ctx.beginPath();
+          ctx.arc(dn.x, dn.y, ART_R + 6, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(74,222,128,0.15)";
+          ctx.fill();
+        }
         ctx.beginPath();
         ctx.arc(dn.x, dn.y, ART_R, 0, Math.PI * 2);
-        ctx.fillStyle = hovered ? "#166534" : "#14532d";
+        ctx.fillStyle = selected ? "#15803d" : hovered ? "#166534" : "#14532d";
         ctx.fill();
-        ctx.strokeStyle = hovered ? "#4ade80" : "#22c55e";
-        ctx.lineWidth = hovered ? 2.5 : 1.5;
+        ctx.strokeStyle = selected ? "#86efac" : hovered ? "#4ade80" : "#22c55e";
+        ctx.lineWidth = selected ? 3 : hovered ? 2.5 : 1.5;
         ctx.stroke();
 
         ctx.font = "bold 10px system-ui";
-        ctx.fillStyle = "#bbf7d0";
+        ctx.fillStyle = selected ? "#ffffff" : "#bbf7d0";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         const maxW = ART_R * 2 - 8;
-        const words = dn.label.split(/[._\-]/);
-        if (words.length > 1 && ctx.measureText(dn.label).width > maxW) {
+        const displayLabel = getArtifactLabel(dn.label);
+        const words = displayLabel.split(/[._\-]/);
+        if (words.length > 1 && ctx.measureText(displayLabel).width > maxW) {
           const mid = Math.ceil(words.length / 2);
           ctx.fillText(words.slice(0, mid).join("."), dn.x, dn.y - 7, maxW);
           ctx.fillText(words.slice(mid).join("."), dn.x, dn.y + 7, maxW);
         } else {
-          ctx.fillText(dn.label, dn.x, dn.y, maxW);
+          ctx.fillText(displayLabel, dn.x, dn.y, maxW);
         }
       } else {
         ctx.beginPath();
@@ -460,7 +473,7 @@ export default function FlowGraphWidget({
     }
 
     ctx.restore(); // restore transform
-  }, [filteredData, layout, hoveredNode, transform]);
+  }, [filteredData, layout, hoveredNode, clickedNode, transform]);
 
   // Convert screen coords to world coords
   const screenToWorld = useCallback((sx: number, sy: number) => {
@@ -481,6 +494,7 @@ export default function FlowGraphWidget({
       if (isPanning.current) {
         const dx = screenX - panStart.current.x;
         const dy = screenY - panStart.current.y;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) panMoved.current = true;
         setTransform(t => ({ ...t, tx: panStart.current.tx + dx, ty: panStart.current.ty + dy }));
         return;
       }
@@ -508,6 +522,7 @@ export default function FlowGraphWidget({
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
       isPanning.current = true;
+      panMoved.current = false;
       panStart.current = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
@@ -517,9 +532,32 @@ export default function FlowGraphWidget({
     }
   }, []);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const wasPanning = isPanning.current;
     isPanning.current = false;
-  }, []);
+
+    // If mouse didn't move much → treat as click
+    if (wasPanning && !panMoved.current) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const { tx, ty, scale } = transformRef.current;
+      const mx = (screenX - tx) / scale;
+      const my = (screenY - ty) / scale;
+
+      const hit = layout.nodes.find((dn) => {
+        if (dn.kind === "artifact") {
+          const dx = mx - dn.x;
+          const dy = my - dn.y;
+          return dx * dx + dy * dy <= ART_R * ART_R;
+        }
+        return false; // only artifact nodes are clickable
+      });
+      setClickedNode((prev) => (prev?.id === hit?.id ? null : hit ?? null));
+    }
+  }, [layout]);
 
   // Wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -572,12 +610,13 @@ export default function FlowGraphWidget({
     );
   }
 
-  // Tooltip position in screen space
-  const tooltipScreenX = hoveredNode
+  // Tooltip: hover takes priority, then clicked (locked)
+  const tooltipNode = hoveredNode ?? clickedNode;
+  const tooltipScreenX = tooltipNode
     ? (() => {
         const { tx, ty, scale } = transform;
-        const worldX = hoveredNode.kind === "artifact" ? hoveredNode.x + ART_R : hoveredNode.x + hoveredNode.w;
-        const worldY = hoveredNode.kind === "artifact" ? hoveredNode.y : hoveredNode.y + hoveredNode.h / 2;
+        const worldX = tooltipNode.kind === "artifact" ? tooltipNode.x + ART_R : tooltipNode.x + tooltipNode.w;
+        const worldY = tooltipNode.kind === "artifact" ? tooltipNode.y : tooltipNode.y + tooltipNode.h / 2;
         return { x: worldX * scale + tx + 8, y: worldY * scale + ty - 20 };
       })()
     : null;
@@ -646,23 +685,27 @@ export default function FlowGraphWidget({
       />
 
       {/* 툴팁 */}
-      {hoveredNode && tooltipScreenX && (
+      {tooltipNode && tooltipScreenX && (
         <div
-          className="pointer-events-none absolute z-20 rounded bg-slate-800 border border-slate-600 px-3 py-2 text-xs text-white shadow-lg max-w-[200px]"
+          className={`pointer-events-none absolute z-20 rounded px-3 py-2 text-xs text-white shadow-lg max-w-[220px] ${
+            clickedNode?.id === tooltipNode.id && !hoveredNode
+              ? "bg-slate-700 border border-green-500/60"
+              : "bg-slate-800 border border-slate-600"
+          }`}
           style={{ left: tooltipScreenX.x, top: tooltipScreenX.y }}
         >
-          {hoveredNode.kind === "tool" ? (
+          {tooltipNode.kind === "tool" ? (
             <>
               <div className="text-[10px] text-indigo-400 font-medium mb-1">Tool</div>
               {(() => {
-                const e = hoveredNode.data as FlowEdge;
+                const e = tooltipNode.data as FlowEdge;
                 return (
                   <>
                     {e.agent_name && <div className="text-purple-400">Agent: {e.agent_name}</div>}
                     <div className="text-slate-300">Fn: {e.tool_name}</div>
                     {filteredData && (() => {
                       const tgt = filteredData.nodes.find((n) => n.id === e.target);
-                      return tgt ? <div className="text-green-400 mt-1">→ {tgt.artifact_name || tgt.label}</div> : null;
+                      return tgt ? <div className="text-green-400 mt-1">→ {getArtifactLabel(tgt.artifact_name || tgt.label)}</div> : null;
                     })()}
                   </>
                 );
@@ -670,13 +713,22 @@ export default function FlowGraphWidget({
             </>
           ) : (
             <>
-              <div className="text-[10px] text-green-400 font-medium mb-1">Artifact</div>
+              <div className="text-[10px] text-green-400 font-medium mb-1">
+                Artifact {clickedNode?.id === tooltipNode.id ? "· 선택됨" : ""}
+              </div>
               {(() => {
-                const n = hoveredNode.data as FlowNode;
-                return <div className="text-slate-300">{n.artifact_name || n.label}</div>;
+                const n = tooltipNode.data as FlowNode;
+                const rawName = n.artifact_name || n.label;
+                const koName = getArtifactLabel(rawName);
+                return (
+                  <>
+                    <div className="text-slate-200 font-medium">{koName}</div>
+                    {koName !== rawName && <div className="text-slate-500 text-[10px]">{rawName}</div>}
+                  </>
+                );
               })()}
               {filteredData && (() => {
-                const ce = filteredData.edges.find((e) => e.target === hoveredNode.id);
+                const ce = filteredData.edges.find((e) => e.target === tooltipNode.id);
                 return ce ? (
                   <div className="text-purple-400 mt-1">← {ce.agent_name ? `${ce.agent_name}:` : ""}{ce.tool_name}</div>
                 ) : null;
