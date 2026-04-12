@@ -1,12 +1,17 @@
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
-import { Send, Loader2, AlertCircle, RefreshCw, Save, User, Bot, ChevronDown, LogOut } from "lucide-react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import {
+  Send,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Save,
+  User,
+  Bot,
+  ChevronDown,
+  LogOut,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -18,14 +23,13 @@ const API_URL =
   "http://localhost:8080";
 
 /* ── 마크다운 커스텀 컴포넌트 ── */
-const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+const markdownComponents: React.ComponentProps<
+  typeof ReactMarkdown
+>["components"] = {
   // 표: 가로 스크롤 래퍼 + 테두리/줄무늬
   table: ({ children, ...props }) => (
     <div className="overflow-x-auto my-3 rounded-lg border border-gray-200">
-      <table
-        className="min-w-full border-collapse text-xs"
-        {...props}
-      >
+      <table className="min-w-full border-collapse text-xs" {...props}>
         {children}
       </table>
     </div>
@@ -41,7 +45,10 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     </tbody>
   ),
   tr: ({ children, ...props }) => (
-    <tr className="even:bg-gray-50 hover:bg-blue-50 transition-colors" {...props}>
+    <tr
+      className="even:bg-gray-50 hover:bg-blue-50 transition-colors"
+      {...props}
+    >
       {children}
     </tr>
   ),
@@ -84,13 +91,19 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     );
   },
   pre: ({ children, ...props }) => (
-    <pre className="bg-gray-900 rounded my-2 overflow-x-auto text-xs" {...props}>
+    <pre
+      className="bg-gray-900 rounded my-2 overflow-x-auto text-xs"
+      {...props}
+    >
       {children}
     </pre>
   ),
   // 헤딩
   h1: ({ children, ...props }) => (
-    <h1 className="text-base font-bold text-gray-900 mt-4 mb-2 pb-1 border-b border-gray-200" {...props}>
+    <h1
+      className="text-base font-bold text-gray-900 mt-4 mb-2 pb-1 border-b border-gray-200"
+      {...props}
+    >
       {children}
     </h1>
   ),
@@ -154,7 +167,10 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
 type SessionStatus = "idle" | "input_user" | "creating" | "ready" | "error";
 
 /* ── Frontend Form types (from ADK stateDelta.frontend_data) ── */
-interface FormFieldOption { label: string; value: string }
+interface FormFieldOption {
+  label: string;
+  value: string;
+}
 interface FormField {
   name: string;
   label: string;
@@ -189,7 +205,12 @@ type WidgetMeta =
 const STORAGE_KEY = "chatUserId";
 
 export default function ChatPanel() {
-  const { addPlotlyWindow, addCsvFileWindow, addFlowGraphWindow, clearAllWindows } = useWorkspace();
+  const {
+    addPlotlyWindow,
+    addCsvFileWindow,
+    addFlowGraphWindow,
+    clearAllWindows,
+  } = useWorkspace();
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -197,7 +218,9 @@ export default function ChatPanel() {
 
   // 동적 폼 상태 (frontend_trigger)
   const [pendingForm, setPendingForm] = useState<FrontendFormData | null>(null);
-  const [formValues, setFormValues] = useState<Record<string, string | number>>({});
+  const [formValues, setFormValues] = useState<Record<string, string | number>>(
+    {},
+  );
 
   // 에이전트 관련 상태
   const [agents, setAgents] = useState<string[]>(["root_agent"]);
@@ -214,7 +237,8 @@ export default function ChatPanel() {
   });
   const [userId, setUserId] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("input_user");
+  const [sessionStatus, setSessionStatus] =
+    useState<SessionStatus>("input_user");
 
   const [isSending, setIsSending] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -275,7 +299,9 @@ export default function ChatPanel() {
       setUserId(inputUserId);
       setSessionId(sessionIdVal);
       setSessionStatus("ready");
-      setMessages([{ role: "assistant", text: `세션 준비됨 · ${inputUserId}` }]);
+      setMessages([
+        { role: "assistant", text: `세션 준비됨 · ${inputUserId}` },
+      ]);
       localStorage.setItem(STORAGE_KEY, inputUserId);
 
       // 에이전트 목록 로드
@@ -288,11 +314,18 @@ export default function ChatPanel() {
         .catch(() => {});
 
       // Emit event to load notebooks
-      window.dispatchEvent(new CustomEvent("notebook:load", { detail: { userId: inputUserId } }));
+      window.dispatchEvent(
+        new CustomEvent("notebook:load", { detail: { userId: inputUserId } }),
+      );
     } catch (e: any) {
       console.error("[ChatPanel] Session error:", e);
       setSessionStatus("error");
-      setMessages([{ role: "assistant", text: `세션 생성 실패: ${String(e?.message ?? e)}` }]);
+      setMessages([
+        {
+          role: "assistant",
+          text: `세션 생성 실패: ${String(e?.message ?? e)}`,
+        },
+      ]);
     } finally {
       creatingRef.current = false;
     }
@@ -338,7 +371,10 @@ export default function ChatPanel() {
       if (!t || isSending) return;
 
       if (!userId || !sessionId) {
-        pushMsg("assistant", "세션이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.");
+        pushMsg(
+          "assistant",
+          "세션이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.",
+        );
         return;
       }
 
@@ -364,7 +400,11 @@ export default function ChatPanel() {
         });
 
         const responseText = await res.text();
-        console.log("[ChatPanel] Chat response:", res.status, responseText.slice(0, 500));
+        console.log(
+          "[ChatPanel] Chat response:",
+          res.status,
+          responseText.slice(0, 500),
+        );
 
         let json: any = null;
         try {
@@ -383,8 +423,11 @@ export default function ChatPanel() {
         }
 
         // 새 응답 포맷: { status, outputs, text?, tool_name?, responding_agent? }
-        const outputs: Array<{ type: string; uri: string; mime_type?: string }> =
-          json?.outputs ?? [];
+        const outputs: Array<{
+          type: string;
+          uri: string;
+          mime_type?: string;
+        }> = json?.outputs ?? [];
         const toolName: string = json?.tool_name ?? "";
         if (json?.responding_agent) {
           setCurrentAgent(json.responding_agent);
@@ -412,7 +455,9 @@ export default function ChatPanel() {
           json?.csv_files ?? [];
         for (const csv of csvFiles) {
           if (csv.file_id && csv.filename) {
-            const widgetTitle = toolName ? `${toolName}_${csv.filename}` : csv.filename;
+            const widgetTitle = toolName
+              ? `${toolName}_${csv.filename}`
+              : csv.filename;
             const winId = addCsvFileWindow(widgetTitle, csv.file_id);
             setWidgetsMeta((prev) => [
               ...prev,
@@ -420,7 +465,11 @@ export default function ChatPanel() {
             ]);
             setMessages((m) => [
               ...m,
-              { role: "assistant", text: `CSV: ${widgetTitle}`, windowId: winId },
+              {
+                role: "assistant",
+                text: `CSV: ${widgetTitle}`,
+                windowId: winId,
+              },
             ]);
           }
         }
@@ -438,20 +487,22 @@ export default function ChatPanel() {
             ]);
             setMessages((m) => [
               ...m,
-              { role: "assistant", text: `그래프: ${widgetTitle}`, windowId: winId },
+              {
+                role: "assistant",
+                text: `그래프: ${widgetTitle}`,
+                windowId: winId,
+              },
             ]);
           }
         }
 
         // Assistant text
-        const hasWidgets = csvFiles.length > 0 || plotlyFigs.length > 0 || outputs.length > 0;
+        const hasWidgets =
+          csvFiles.length > 0 || plotlyFigs.length > 0 || outputs.length > 0;
         if (json?.text) {
           pushMsg("assistant", json.text);
         } else if (!hasWidgets && !json?.frontend_data) {
-          pushMsg(
-            "assistant",
-            `응답 없음\n${JSON.stringify(json, null, 2)}`,
-          );
+          pushMsg("assistant", `응답 없음\n${JSON.stringify(json, null, 2)}`);
         }
 
         // 동적 폼 트리거
@@ -484,7 +535,15 @@ export default function ChatPanel() {
         setTimeout(() => inputRef.current?.focus(), 0);
       }
     },
-    [isSending, userId, sessionId, selectedAgent, addCsvFileWindow, addPlotlyWindow, setWidgetsMeta],
+    [
+      isSending,
+      userId,
+      sessionId,
+      selectedAgent,
+      addCsvFileWindow,
+      addPlotlyWindow,
+      setWidgetsMeta,
+    ],
   );
 
   function send() {
@@ -500,33 +559,38 @@ export default function ChatPanel() {
     void sendTextToAdk(payload);
   }
 
-  const doSaveNotebook = useCallback(async (title: string) => {
-    if (!userId || !sessionId || messages.length === 0) return;
-    setIsSaving(true);
-    setSaveDialogOpen(false);
-    try {
-      const res = await fetch(`${API_URL}/api/notebooks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: userId,
-          session_id: sessionId,
-          title,
-          messages,
-          metadata: { widgets: widgetsMeta },
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const notebook = await res.json();
-      pushMsg("assistant", `노트북 저장됨: ${notebook.title}`);
-      window.dispatchEvent(new CustomEvent("notebook:refresh", { detail: { userId } }));
-    } catch (e: any) {
-      console.error("[ChatPanel] Save error:", e);
-      pushMsg("assistant", `저장 실패: ${String(e?.message ?? e)}`);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [userId, sessionId, messages, widgetsMeta]);
+  const doSaveNotebook = useCallback(
+    async (title: string) => {
+      if (!userId || !sessionId || messages.length === 0) return;
+      setIsSaving(true);
+      setSaveDialogOpen(false);
+      try {
+        const res = await fetch(`${API_URL}/api/notebooks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            session_id: sessionId,
+            title,
+            messages,
+            metadata: { widgets: widgetsMeta },
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const notebook = await res.json();
+        pushMsg("assistant", `노트북 저장됨: ${notebook.title}`);
+        window.dispatchEvent(
+          new CustomEvent("notebook:refresh", { detail: { userId } }),
+        );
+      } catch (e: any) {
+        console.error("[ChatPanel] Save error:", e);
+        pushMsg("assistant", `저장 실패: ${String(e?.message ?? e)}`);
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [userId, sessionId, messages, widgetsMeta],
+  );
 
   const saveNotebook = useCallback(() => {
     if (!userId || !sessionId || messages.length === 0) return;
@@ -542,7 +606,9 @@ export default function ChatPanel() {
       const baseText = (detail?.text ?? "").trim();
       if (!baseText) return;
 
-      const fileNameLine = detail.fileName ? `파일명: ${detail.fileName}\n` : "";
+      const fileNameLine = detail.fileName
+        ? `파일명: ${detail.fileName}\n`
+        : "";
       const finalText =
         fileNameLine && !baseText.includes("파일명:")
           ? `${fileNameLine}${baseText}`
@@ -615,17 +681,25 @@ export default function ChatPanel() {
       // 노트북 세션이 살아있는지 확인 → 살아있으면 해당 세션으로 전환
       if (nb.session_id && nb.user_id) {
         try {
-          const res = await fetch(`${API_URL}/api/sessions?user_id=${encodeURIComponent(nb.user_id)}`);
+          const res = await fetch(
+            `${API_URL}/api/sessions?user_id=${encodeURIComponent(nb.user_id)}`,
+          );
           if (res.ok) {
-            const sessions: Array<{ session_id: string; expired: boolean }> = await res.json();
-            const alive = sessions.find((s) => s.session_id === nb.session_id && !s.expired);
+            const sessions: Array<{ session_id: string; expired: boolean }> =
+              await res.json();
+            const alive = sessions.find(
+              (s) => s.session_id === nb.session_id && !s.expired,
+            );
             if (alive) {
               setUserId(nb.user_id);
               setSessionId(nb.session_id);
               setSessionStatus("ready");
               pushMsg("assistant", `세션 복원됨 · ${nb.session_id}`);
             } else {
-              pushMsg("assistant", "이전 세션이 만료되었습니다. 새 메시지를 보내면 현재 세션으로 전송됩니다.");
+              pushMsg(
+                "assistant",
+                "이전 세션이 만료되었습니다. 새 메시지를 보내면 현재 세션으로 전송됩니다.",
+              );
             }
           }
         } catch {
@@ -660,8 +734,8 @@ export default function ChatPanel() {
       if (selectedArtifacts && selectedArtifacts.length > 0) {
         filteredMessages = messages.filter((msg) =>
           selectedArtifacts.some((artifact) =>
-            msg.text.toLowerCase().includes(artifact.toLowerCase())
-          )
+            msg.text.toLowerCase().includes(artifact.toLowerCase()),
+          ),
         );
         // If no messages match, include all
         if (filteredMessages.length === 0) {
@@ -670,7 +744,8 @@ export default function ChatPanel() {
       }
 
       try {
-        const notebookTitle = title || `Flow ${new Date().toLocaleString("ko-KR")}`;
+        const notebookTitle =
+          title || `Flow ${new Date().toLocaleString("ko-KR")}`;
         const res = await fetch(`${API_URL}/api/notebooks`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -687,8 +762,13 @@ export default function ChatPanel() {
         }
 
         const notebook = await res.json();
-        pushMsg("assistant", `노트북 저장됨: ${notebook.title} (${selectedArtifacts?.length || 0}개 아티팩트)`);
-        window.dispatchEvent(new CustomEvent("notebook:refresh", { detail: { userId } }));
+        pushMsg(
+          "assistant",
+          `노트북 저장됨: ${notebook.title} (${selectedArtifacts?.length || 0}개 아티팩트)`,
+        );
+        window.dispatchEvent(
+          new CustomEvent("notebook:refresh", { detail: { userId } }),
+        );
       } catch (e: any) {
         console.error("[ChatPanel] Notebook add error:", e);
         pushMsg("assistant", `저장 실패: ${String(e?.message ?? e)}`);
@@ -702,7 +782,11 @@ export default function ChatPanel() {
   // Listen for chat:insert events (from Ctrl+click on widgets/columns)
   useEffect(() => {
     const handler = (e: Event) => {
-      const ce = e as CustomEvent<{ text: string; artifact?: string; column?: string }>;
+      const ce = e as CustomEvent<{
+        text: string;
+        artifact?: string;
+        column?: string;
+      }>;
       const { text } = ce.detail || {};
       if (text) {
         setInput((prev) => prev + text);
@@ -739,7 +823,10 @@ export default function ChatPanel() {
   // 에이전트 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+      if (
+        agentDropdownRef.current &&
+        !agentDropdownRef.current.contains(e.target as Node)
+      ) {
         setAgentDropdownOpen(false);
       }
     };
@@ -767,7 +854,9 @@ export default function ChatPanel() {
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <User size={32} className="text-blue-500" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-800">사용자 ID 입력</h2>
+              <h2 className="text-lg font-semibold text-gray-800">
+                사용자 ID 입력
+              </h2>
               <p className="text-sm text-gray-500 mt-1">
                 ID를 입력하면 저장된 노트북을 불러옵니다
               </p>
@@ -781,7 +870,7 @@ export default function ChatPanel() {
                 className={cn(
                   "w-full h-12 px-4 rounded-lg border text-sm transition-all",
                   "bg-gray-50 border-gray-300 placeholder:text-gray-400",
-                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white"
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white",
                 )}
               />
               <button
@@ -790,7 +879,7 @@ export default function ChatPanel() {
                 className={cn(
                   "w-full h-12 rounded-lg font-medium text-sm transition-all",
                   "bg-blue-500 text-white hover:bg-blue-600",
-                  "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                  "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed",
                 )}
               >
                 시작하기
@@ -808,14 +897,17 @@ export default function ChatPanel() {
       {saveDialogOpen && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-80 p-5 flex flex-col gap-4">
-            <h3 className="font-semibold text-gray-800 text-sm">노트북 이름 입력</h3>
+            <h3 className="font-semibold text-gray-800 text-sm">
+              노트북 이름 입력
+            </h3>
             <input
               autoFocus
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
               value={saveNameInput}
               onChange={(e) => setSaveNameInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && saveNameInput.trim()) void doSaveNotebook(saveNameInput.trim());
+                if (e.key === "Enter" && saveNameInput.trim())
+                  void doSaveNotebook(saveNameInput.trim());
                 if (e.key === "Escape") setSaveDialogOpen(false);
               }}
               placeholder="노트북 이름"
@@ -853,7 +945,7 @@ export default function ChatPanel() {
                   "h-6 px-2 text-xs rounded-full flex items-center gap-1 transition-colors border",
                   selectedAgent === "root_agent"
                     ? "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                    : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                    : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100",
                 )}
                 onClick={() => setAgentDropdownOpen((v) => !v)}
                 title="대화할 에이전트 선택"
@@ -872,14 +964,23 @@ export default function ChatPanel() {
                       key={ag}
                       className={cn(
                         "w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 transition-colors",
-                        selectedAgent === ag ? "text-purple-700 font-medium bg-purple-50" : "text-gray-700"
+                        selectedAgent === ag
+                          ? "text-purple-700 font-medium bg-purple-50"
+                          : "text-gray-700",
                       )}
                       onClick={() => {
                         setSelectedAgent(ag);
                         setAgentDropdownOpen(false);
                       }}
                     >
-                      <Bot size={10} className={selectedAgent === ag ? "text-purple-500" : "text-gray-400"} />
+                      <Bot
+                        size={10}
+                        className={
+                          selectedAgent === ag
+                            ? "text-purple-500"
+                            : "text-gray-400"
+                        }
+                      />
                       <span className="truncate flex-1">{ag}</span>
                       {selectedAgent === ag && (
                         <span className="text-[10px] text-purple-500">✓</span>
@@ -933,7 +1034,11 @@ export default function ChatPanel() {
               onClick={saveNotebook}
               disabled={isSaving || messages.length === 0}
             >
-              {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              {isSaving ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Save size={12} />
+              )}
               저장
             </button>
             <button
@@ -971,14 +1076,20 @@ export default function ChatPanel() {
                   className="flex items-center gap-2 px-3 py-2 rounded-xl rounded-bl-md text-sm bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer"
                   onClick={() =>
                     window.dispatchEvent(
-                      new CustomEvent("workspace:focus", { detail: { windowId: m.windowId } }),
+                      new CustomEvent("workspace:focus", {
+                        detail: { windowId: m.windowId },
+                      }),
                     )
                   }
                   title="클릭하면 워크스페이스에서 해당 위젯으로 이동"
                 >
                   <span className="text-base">{isChart ? "📊" : "📋"}</span>
-                  <span className="font-medium truncate max-w-[240px]">{m.text}</span>
-                  <span className="text-xs text-indigo-400 shrink-0">↗ 보기</span>
+                  <span className="font-medium truncate max-w-[240px]">
+                    {m.text}
+                  </span>
+                  <span className="text-xs text-indigo-400 shrink-0">
+                    ↗ 보기
+                  </span>
                 </button>
               </div>
             );
@@ -1002,7 +1113,6 @@ export default function ChatPanel() {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={markdownComponents}
-                    className="max-w-none text-sm"
                   >
                     {m.text}
                   </ReactMarkdown>
@@ -1025,21 +1135,30 @@ export default function ChatPanel() {
               </div>
               <form onSubmit={submitForm} className="px-4 py-3 space-y-3">
                 {pendingForm.description && (
-                  <p className="text-xs text-gray-500">{pendingForm.description}</p>
+                  <p className="text-xs text-gray-500">
+                    {pendingForm.description}
+                  </p>
                 )}
                 {pendingForm.fields.map((field) => (
                   <div key={field.name} className="space-y-1">
                     <label className="block text-xs font-medium text-gray-700">
                       {field.label}
-                      {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                      {field.required && (
+                        <span className="text-red-500 ml-0.5">*</span>
+                      )}
                     </label>
                     {field.type === "select" ? (
                       <select
                         className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                        value={String(formValues[field.name] ?? field.default ?? "")}
+                        value={String(
+                          formValues[field.name] ?? field.default ?? "",
+                        )}
                         required={field.required}
                         onChange={(e) =>
-                          setFormValues((v) => ({ ...v, [field.name]: e.target.value }))
+                          setFormValues((v) => ({
+                            ...v,
+                            [field.name]: e.target.value,
+                          }))
                         }
                       >
                         {(field.options ?? []).map((opt) => (
@@ -1069,7 +1188,9 @@ export default function ChatPanel() {
                         {field.unit_options?.length ? (
                           <select
                             className="h-9 px-2 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white shrink-0"
-                            value={String(formValues[`${field.name}__unit`] ?? "")}
+                            value={String(
+                              formValues[`${field.name}__unit`] ?? "",
+                            )}
                             onChange={(e) =>
                               setFormValues((v) => ({
                                 ...v,
@@ -1090,17 +1211,24 @@ export default function ChatPanel() {
                         <input
                           type="text"
                           className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                          value={String(formValues[field.name] ?? field.default ?? "")}
+                          value={String(
+                            formValues[field.name] ?? field.default ?? "",
+                          )}
                           required={field.required}
                           placeholder={field.placeholder}
                           onChange={(e) =>
-                            setFormValues((v) => ({ ...v, [field.name]: e.target.value }))
+                            setFormValues((v) => ({
+                              ...v,
+                              [field.name]: e.target.value,
+                            }))
                           }
                         />
                         {field.unit_options?.length ? (
                           <select
                             className="h-9 px-2 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white shrink-0"
-                            value={String(formValues[`${field.name}__unit`] ?? "")}
+                            value={String(
+                              formValues[`${field.name}__unit`] ?? "",
+                            )}
                             onChange={(e) =>
                               setFormValues((v) => ({
                                 ...v,
@@ -1126,7 +1254,7 @@ export default function ChatPanel() {
                     className={cn(
                       "flex-1 h-9 rounded-lg text-sm font-medium transition-all",
                       "bg-blue-500 text-white hover:bg-blue-600",
-                      "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                      "disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed",
                     )}
                   >
                     {pendingForm.submit_label ?? "실행"}
@@ -1156,15 +1284,15 @@ export default function ChatPanel() {
             sessionStatus === "ready"
               ? "메시지를 입력하세요…"
               : sessionStatus === "creating"
-              ? "세션 연결 중…"
-              : "세션 오류 – 재연결 후 입력하세요"
+                ? "세션 연결 중…"
+                : "세션 오류 – 재연결 후 입력하세요"
           }
           disabled={!canSend}
           className={cn(
             "flex-1 h-11 px-4 rounded-full border text-sm transition-all",
             "bg-gray-50 border-gray-300 placeholder:text-gray-400",
             "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white",
-            "disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+            "disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed",
           )}
         />
         <button
@@ -1174,7 +1302,7 @@ export default function ChatPanel() {
             "h-11 w-11 rounded-full flex items-center justify-center transition-all shrink-0",
             "bg-blue-500 text-white shadow-md hover:bg-blue-600 hover:shadow-lg",
             "active:scale-95",
-            "disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none disabled:cursor-not-allowed"
+            "disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none disabled:cursor-not-allowed",
           )}
         >
           {isSending ? (
