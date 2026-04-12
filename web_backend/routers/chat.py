@@ -27,6 +27,7 @@ from ..services.response_parser import (
 from ..services.plotly_fetcher import fetch_plotly_from_url
 from ..services.flow_parser import parse_artifact_flow
 from ..services.flow_store import flow_store
+from ..services.flow_db import save_flow_edges
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -166,6 +167,7 @@ async def chat(req: ChatRequest):
 
     try:
         existing_flow = flow_store.get(req.session_id)
+        prev_edge_ids = {e.id for e in existing_flow.edges} if existing_flow else set()
         updated_flow = parse_artifact_flow(
             session_id=req.session_id,
             events=events,
@@ -174,6 +176,10 @@ async def chat(req: ChatRequest):
         )
         flow_store.update(req.session_id, updated_flow)
         log.debug("Flow updated: %d nodes, %d edges", len(updated_flow.nodes), len(updated_flow.edges))
+        # 새 엣지만 DB에 저장
+        new_edges = [e for e in updated_flow.edges if e.id not in prev_edge_ids]
+        if new_edges:
+            await save_flow_edges(req.session_id, new_edges, updated_flow.nodes)
     except Exception as exc:
         log.warning("Failed to parse artifact flow: %s", exc)
 

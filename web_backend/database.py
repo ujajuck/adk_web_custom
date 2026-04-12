@@ -36,8 +36,22 @@ CREATE TABLE IF NOT EXISTS notebooks (
     updated_at  TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_notebooks_user ON notebooks(user_id);
+CREATE TABLE IF NOT EXISTS flow_edges (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id       TEXT NOT NULL,
+    edge_id          TEXT NOT NULL,
+    agent_name       TEXT DEFAULT '',
+    tool_name        TEXT NOT NULL DEFAULT '',
+    input_artifact   TEXT,
+    output_artifact  TEXT,
+    tool_args_json   TEXT DEFAULT '{}',
+    created_at       TEXT DEFAULT (datetime('now')),
+    UNIQUE(session_id, edge_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notebooks_user   ON notebooks(user_id);
 CREATE INDEX IF NOT EXISTS idx_notebooks_shared ON notebooks(is_shared);
+CREATE INDEX IF NOT EXISTS idx_flow_edges_sess  ON flow_edges(session_id);
 """
 
 

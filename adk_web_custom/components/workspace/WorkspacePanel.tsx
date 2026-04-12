@@ -25,11 +25,16 @@ export default function WorkspacePanel() {
   } = useWorkspace();
   const boundsRef = useRef<HTMLDivElement | null>(null);
 
-  // workspace:focus 이벤트 수신 → 해당 윈도우를 맨 앞으로
+  // workspace:focus 이벤트 수신 → 해당 윈도우를 맨 앞으로 + 하이라이트
   useEffect(() => {
     const handler = (e: Event) => {
       const { windowId } = (e as CustomEvent<{ windowId: string }>).detail;
-      if (windowId) bringToFront(windowId);
+      if (windowId) {
+        bringToFront(windowId);
+        if (highlightTimer.current) clearTimeout(highlightTimer.current);
+        setHighlightedId(windowId);
+        highlightTimer.current = setTimeout(() => setHighlightedId(null), 1800);
+      }
     };
     window.addEventListener("workspace:focus", handler);
     return () => window.removeEventListener("workspace:focus", handler);
@@ -49,6 +54,10 @@ export default function WorkspacePanel() {
     setViewportSize(el.clientWidth, el.clientHeight - HEADER_H_CONST);
     return () => obs.disconnect();
   }, [setViewportSize]);
+
+  // Highlight state for focused window
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track minimized state and saved sizes
   const [minimized, setMinimized] = useState<Record<string, boolean>>({});
@@ -150,6 +159,7 @@ export default function WorkspacePanel() {
         return (
           <FlowGraphWidget
             sessionId={w.sessionId}
+            staticFlow={w.staticFlow}
             checkedWidgets={checkedWidgets}
             allWindows={windows}
           />
@@ -206,7 +216,10 @@ export default function WorkspacePanel() {
                 });
               }}
               style={{ zIndex: win.z }}
-              className="rounded border bg-card shadow-md overflow-hidden"
+              className={cn(
+                "rounded border bg-card shadow-md overflow-hidden transition-shadow",
+                highlightedId === win.id && "ring-2 ring-indigo-400 ring-offset-1 shadow-indigo-200 shadow-lg",
+              )}
               minWidth={200}
               minHeight={MINIMIZED_HEIGHT}
               dragHandleClassName="ws-window-handle"

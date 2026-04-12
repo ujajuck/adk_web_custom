@@ -17,7 +17,7 @@ export type WorkspaceWidget =
       title: string;
       fig: { data: any[]; layout?: any; config?: any };
     }
-  | { id: string; type: "flowGraph"; title: string; sessionId: string };
+  | { id: string; type: "flowGraph"; title: string; sessionId: string; staticFlow?: any };
 
 export type WorkspaceWindow = {
   id: string;
@@ -40,7 +40,7 @@ type Ctx = {
     title: string,
     fig: { data: any[]; layout?: any; config?: any },
   ) => string;
-  addFlowGraphWindow: (title: string, sessionId: string) => void;
+  addFlowGraphWindow: (title: string, sessionId: string, staticFlow?: any) => void;
   setViewportSize: (w: number, h: number) => void;
   updateWindow: (
     id: string,
@@ -205,7 +205,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return id;
   }
 
-  function addFlowGraphWindow(title: string, sessionId: string) {
+  function addFlowGraphWindow(title: string, sessionId: string, staticFlow?: any) {
     const id = nextId("win");
     const widgetId = nextId("flow");
     const z = zTop + 1;
@@ -220,7 +220,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         {
           id,
-          widget: { id: widgetId, type: "flowGraph", title, sessionId },
+          widget: { id: widgetId, type: "flowGraph", title, sessionId, staticFlow },
           ...pos,
           w,
           h,

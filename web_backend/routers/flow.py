@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..services.flow_store import flow_store
+from ..services.flow_db import get_flow_data
 
 router = APIRouter(prefix="/api/flow", tags=["flow"])
 log = logging.getLogger(__name__)
@@ -30,16 +31,22 @@ class FlowSummary(BaseModel):
 
 @router.get("/{session_id}", response_model=FlowResponse)
 async def get_flow(session_id: str):
-    """세션의 아티팩트 흐름 조회."""
+    """세션의 아티팩트 흐름 조회.
+    in-memory 스토어 우선, 없으면 DB에서 복원."""
     flow = flow_store.get(session_id)
-    if not flow:
-        # 빈 플로우 반환 (에러 대신)
-        return FlowResponse(session_id=session_id, nodes=[], edges=[])
+    if flow and flow.edges:
+        return FlowResponse(
+            session_id=flow.session_id,
+            nodes=[n.to_dict() for n in flow.nodes],
+            edges=[e.to_dict() for e in flow.edges],
+        )
 
+    # DB 폴백: 서버 재시작 후에도 플로우 복원
+    data = await get_flow_data(session_id)
     return FlowResponse(
-        session_id=flow.session_id,
-        nodes=[n.to_dict() for n in flow.nodes],
-        edges=[e.to_dict() for e in flow.edges],
+        session_id=data["session_id"],
+        nodes=data["nodes"],
+        edges=data["edges"],
     )
 
 
